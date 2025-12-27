@@ -4,6 +4,8 @@
 
 # 🐶 みんなでどうぶつクイズ！ (Animal Voice Quiz)
 <img src="./public/images/title.png" alt="App Screenshot" width="400">
+<img width="1847" height="900" alt="image" src="https://github.com/user-attachments/assets/52e7f78f-dfe8-4c5c-bdd1-a700b64fe072" />
+
 声を認識して遊ぶ、子供向けの参加型クイズWebアプリです。
 「これなーんだ？」と聞くのではなく、「いぬ！」「わかめ！」と子供が声に出して答えることで、判断力と発語を促します。
 
