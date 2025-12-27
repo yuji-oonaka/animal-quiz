@@ -1,36 +1,91 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-## Getting Started
 
-First, run the development server:
+***
+
+# 🐶 みんなでどうぶつクイズ！ (Animal Voice Quiz)
+<img src="./public/images/title.png" alt="App Screenshot" width="400">
+声を認識して遊ぶ、子供向けの参加型クイズWebアプリです。
+「これなーんだ？」と聞くのではなく、「いぬ！」「わかめ！」と子供が声に出して答えることで、判断力と発語を促します。
+
+
+
+***
+
+## 🎮 遊び方
+
+1. **スタートボタン**を押すとゲーム開始！
+2. 画面に表示される画像を見て、その名前を叫んでください。
+3. **「どうぶつ」**なら名前を、**「どうぶつじゃない（キノコや車など）」**なら名前、または「どうぶつじゃない！」と答えます。
+4. 正解するとAI音声が褒めてくれます。
+5. 全10問のランダム出題。最後に集めたキャラクターのコレクション画面が見られます。
+
+***
+
+## ✨ 特徴
+
+- **完全ハンズフリー**: スタートボタン以外は触らなくてOK。子供が画面に夢中になっても画面をベタベタ触る必要がありません。
+- **判断力を育てる「ひっかけ問題」**: ロボットやワカメなど「動物に見えるけど違う」問題が含まれており、「動物じゃありませーん！」という回答も正解判定します。
+- **Web Speech API活用**: ブラウザ標準の音声認識・音声合成を使用し、追加のAPIキーなしで動作します。
+- **ランダム出題システム**: 毎回異なる10問が出題されるため、飽きずに遊べます。
+- **楽しい演出**: 正解時の紙吹雪（canvas-confetti）や、明るいBGMのようなテンポ良い進行。
+
+***
+
+## 🛠 使用技術
+
+- **Framework**: Next.js 14 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **Voice**: Web Speech API (Recognition & Synthesis)
+- **Effect**: canvas-confetti
+- **Deployment**: Vercel (予定)
+
+***
+
+## 🚀 ローカルでの実行方法
 
 ```bash
+# リポジトリのクローン
+git clone https://github.com/your-username/animal-quiz.git
+
+# ディレクトリ移動
+cd animal-quiz
+
+# 依存関係のインストール
+npm install
+
+# 開発サーバー起動
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+# ブラウザで http://localhost:3000 を開いてください。（音声認識のためGoogle Chrome推奨）
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+***
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📂 ディレクトリ構成
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- app/data/questions.ts: 出題データ（画像パス、正解キーワード、解説）
+- app/hooks/useSpeechRecognition.ts: 音声認識ロジックのカスタムフック
+- app/components/: UIコンポーネント
 
-## Learn More
+***
 
-To learn more about Next.js, take a look at the following resources:
+## 今後の展望
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- OpenAI APIを導入し、より自然で感情豊かな音声対話の実装
+- 難易度選択（かんたん・ふつう・むずかしい）の追加
+- PWA化によるアプリ化
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+***
 
-## Deploy on Vercel
+## 連絡先・貢献
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- バグ報告や機能提案はIssueへ
+- コントリビューションは歓迎します。プルリクエストの前に「Contributing」ガイドラインを参照してください。
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+***
+
+必要に応じて次を教えてください
+- リポジトリ名と実際のURL
+- 特定のセクションを追加または削除
+- 日本語表現のトーンをより子供向けにカジュアル/フォーマルどちらにするか
