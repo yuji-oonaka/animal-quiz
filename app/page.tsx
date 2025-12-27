@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { questions, Question } from "./data/questions";
 import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
 import { QuizImage } from "./components/QuizImage";
@@ -94,7 +94,7 @@ export default function Home() {
       userVoice.includes(alias)
     );
 
-    // 2. 「動物じゃない枠」の判定強化！
+    // 2. 「動物じゃない枠」の判定強化
     if (currentQuestion.type === "not_animal") {
       const notAnimalKeywords = [
         "どうぶつじゃない",
@@ -102,14 +102,14 @@ export default function Home() {
         "動物じゃありません",
         "どうぶつじゃありません",
         "動物ではありません",
-        "どうぶつではありません", // 「では」に対応
+        "どうぶつではありません",
         "動物じゃありませーん",
         "どうぶつじゃありませーん",
         "ちがう",
-        "ちがい", // 「ちがいます」の「ちがい」も拾うように
+        "ちがい",
         "じゃない",
         "じゃありません",
-        "ではありません", // 部分一致で拾う
+        "ではありません",
       ];
       if (notAnimalKeywords.some((word) => userVoice.includes(word))) {
         isCorrect = true;
@@ -151,6 +151,7 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, gameState]);
 
+  // 📺 1. タイトル画面
   if (gameState === "title") {
     return (
       <main className="fixed inset-0 bg-orange-50 flex flex-col items-center justify-center p-4">
@@ -179,6 +180,7 @@ export default function Home() {
     );
   }
 
+  // 📺 3. リザルト画面
   if (gameState === "result") {
     return (
       <main className="fixed inset-0 bg-yellow-50 overflow-y-auto py-10 px-4">
@@ -223,8 +225,10 @@ export default function Home() {
     );
   }
 
+  // 📺 2. ゲーム画面（ここを修正しました！）
   return (
-    <main className="fixed inset-0 bg-orange-50 flex flex-col">
+    // landscape:flex-row を追加して、横向きの時は横並びレイアウトにする
+    <main className="fixed inset-0 bg-orange-50 flex flex-col landscape:flex-row">
       {isJudged && <ResultEffect isCorrect={isCorrectLast} />}
 
       <button
@@ -234,8 +238,8 @@ export default function Home() {
         🏠 やめる
       </button>
 
-      {/* 🛠️ デバッグ表示エリア（画面上部に小さく表示） */}
-      <div className="absolute top-4 left-0 right-0 flex justify-center pointer-events-none z-20">
+      {/* デバッグ表示（横向き時は左上に寄せる） */}
+      <div className="absolute top-4 left-0 right-0 flex justify-center pointer-events-none z-20 landscape:justify-start landscape:left-20 landscape:top-6">
         <div
           className={`
           px-3 py-1 rounded-full text-xs font-mono text-white opacity-70
@@ -246,6 +250,7 @@ export default function Home() {
         </div>
       </div>
 
+      {/* プログレスバー */}
       <div className="absolute top-0 left-0 w-full h-2 bg-gray-200 z-20">
         <div
           className="h-full bg-green-500 transition-all duration-500"
@@ -254,14 +259,17 @@ export default function Home() {
           }}
         />
       </div>
-      <div className="flex-1 relative">
+
+      {/* 画像エリア（横向き時は画面の左側2/3を使う） */}
+      <div className="flex-1 relative landscape:h-full landscape:w-2/3">
         <QuizImage src={currentQuestion.image} alt={currentQuestion.label} />
         <div className="absolute top-4 right-4 bg-white/80 backdrop-blur px-4 py-2 rounded-full font-bold text-orange-600 shadow-md z-10">
           {currentIndex + 1} / {gameQuestions.length}
         </div>
       </div>
 
-      <div className="h-32 bg-orange-100/90 backdrop-blur-sm flex flex-col items-center justify-center pb-safe z-10">
+      {/* 操作エリア（横向き時は画面の右側1/3を使い、左に境界線をつける） */}
+      <div className="h-32 bg-orange-100/90 backdrop-blur-sm flex flex-col items-center justify-center pb-safe z-10 landscape:h-full landscape:w-1/3 landscape:border-l-4 landscape:border-orange-200">
         <button
           onClick={() => {
             if (!isListening && !isJudged) {
