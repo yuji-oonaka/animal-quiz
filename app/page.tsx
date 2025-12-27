@@ -1,65 +1,257 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { questions, Question } from "./data/questions";
+import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
+import { QuizImage } from "./components/QuizImage";
+import { ResultEffect } from "./components/ResultEffect";
 import Image from "next/image";
 
+const shuffleArray = (array: Question[]) => {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+};
+
 export default function Home() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+  const [gameState, setGameState] = useState<"title" | "playing" | "result">(
+    "title"
+  );
+  const [gameQuestions, setGameQuestions] = useState<Question[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const [isJudged, setIsJudged] = useState(false);
+  const [isCorrectLast, setIsCorrectLast] = useState(false);
+  const [selectedVoice, setSelectedVoice] =
+    useState<SpeechSynthesisVoice | null>(null);
+
+  const { text, isListening, startListening } = useSpeechRecognition();
+
+  const currentQuestion = gameQuestions[currentIndex];
+
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const bestVoice =
+        voices.find(
+          (v) => v.lang.includes("ja") && v.name.includes("Google")
+        ) || voices.find((v) => v.lang.includes("ja"));
+      if (bestVoice) setSelectedVoice(bestVoice);
+    };
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    loadVoices();
+  }, []);
+
+  const speak = useCallback(
+    (message: string, onEnd?: () => void) => {
+      window.speechSynthesis.cancel();
+      const uttr = new SpeechSynthesisUtterance(message);
+      uttr.lang = "ja-JP";
+      if (selectedVoice) uttr.voice = selectedVoice;
+      uttr.rate = 1.1;
+      uttr.pitch = 1.3;
+      uttr.onend = () => {
+        if (onEnd) setTimeout(onEnd, 500);
+      };
+      window.speechSynthesis.speak(uttr);
+    },
+    [selectedVoice]
+  );
+
+  const handleGameStart = () => {
+    const shuffled = shuffleArray(questions);
+    const selected = shuffled.slice(0, 10);
+    setGameQuestions(selected);
+    setCurrentIndex(0);
+    setGameState("playing");
+    speak("どうぶつクイズ！ 10もん しょうぶ！ スタート！", () => {
+      startListening();
+    });
+  };
+
+  const handleNext = useCallback(() => {
+    setIsJudged(false);
+    setIsCorrectLast(false);
+
+    if (currentIndex < gameQuestions.length - 1) {
+      setCurrentIndex((prev) => prev + 1);
+      setTimeout(() => {
+        startListening();
+      }, 800);
+    } else {
+      setGameState("result");
+      speak("ぜんぶ おしまい！ よくがんばったね！");
+    }
+  }, [currentIndex, gameQuestions.length, startListening, speak]);
+
+  // 🧠 判定ロジック（ここを修正しました！）
+  const checkAnswer = (userVoice: string) => {
+    if (isJudged) return;
+
+    // 1. 通常の正解判定（名前があってるか？）
+    let isCorrect = currentQuestion.aliases.some((alias) =>
+      userVoice.includes(alias)
+    );
+
+    // 2. 追加ルール：「動物じゃない枠」のときは「動物じゃない」と言っても正解！
+    if (currentQuestion.type === "not_animal") {
+      const notAnimalKeywords = [
+        "どうぶつじゃない",
+        "動物じゃない",
+        "動物じゃありません",
+        "どうぶつじゃありません",
+        "動物じゃありませーん",
+        "ちがう", // 「（動物と）ちがう！」というニュアンスも拾う
+      ];
+      if (notAnimalKeywords.some((word) => userVoice.includes(word))) {
+        isCorrect = true;
+      }
+    }
+
+    setIsJudged(true);
+    setIsCorrectLast(isCorrect);
+
+    if (isCorrect) {
+      if (currentQuestion.type === "animal") {
+        speak(`せいかい！${currentQuestion.label}だね！`, handleNext);
+      } else {
+        // 名前で答えても、「動物じゃない」と答えても、このセリフで返します
+        speak(`せいかい！これは、どうぶつじゃ、ありませーーーん！`, handleNext);
+      }
+    } else {
+      speak("あれ？ もういちど いってみてね", () => {
+        setIsJudged(false);
+        setIsCorrectLast(false);
+        startListening();
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (text && !isJudged && gameState === "playing") {
+      checkAnswer(text);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, gameState]);
+
+  if (gameState === "title") {
+    return (
+      <main className="fixed inset-0 bg-orange-50 flex flex-col items-center justify-center p-4">
+        <h1 className="text-4xl font-extrabold text-orange-600 mb-8 tracking-widest drop-shadow-md">
+          どうぶつ
+          <br />
+          クイズ
+        </h1>
+        <div className="bg-white p-6 rounded-3xl shadow-lg mb-10 w-full max-w-sm">
+          <p className="text-gray-600 text-center mb-4 font-bold">
+            10もん チャレンジ！
           </p>
+          <div className="flex justify-center gap-4 text-4xl">
+            <span>🐶</span>
+            <span>🐱</span>
+            <span>🦁</span>
+            <span>🍄</span>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        <button
+          onClick={handleGameStart}
+          className="bg-red-500 hover:bg-red-600 text-white text-3xl font-bold py-6 px-12 rounded-full shadow-xl transition transform hover:scale-105 active:scale-95 animate-bounce"
+        >
+          スタート！
+        </button>
+      </main>
+    );
+  }
+
+  if (gameState === "result") {
+    return (
+      <main className="fixed inset-0 bg-yellow-50 overflow-y-auto py-10 px-4">
+        <ResultEffect isCorrect={true} />
+        <div className="max-w-2xl mx-auto text-center">
+          <h2 className="text-3xl font-bold text-orange-600 mb-2">
+            クリア おめでとう！
+          </h2>
+          <p className="text-gray-600 mb-8">きょう であった なかまたちだよ</p>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-10">
+            {gameQuestions.map((q, i) => (
+              <div
+                key={q.id}
+                className="bg-white p-2 rounded-xl shadow-md transform hover:scale-105 transition-transform"
+                style={{ animationDelay: `${i * 100}ms` }}
+              >
+                <div className="aspect-square relative mb-2">
+                  <Image
+                    src={q.image}
+                    alt={q.label}
+                    fill
+                    className="object-contain"
+                  />
+                </div>
+                <div className="text-center font-bold text-gray-700 text-sm">
+                  {q.label}
+                </div>
+                <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-8 h-8 flex items-center justify-center rounded-full border-2 border-white shadow">
+                  OK
+                </div>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => setGameState("title")}
+            className="bg-blue-500 hover:bg-blue-600 text-white text-xl font-bold py-4 px-10 rounded-full shadow-lg transition transform hover:scale-105"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            タイトルにもどる
+          </button>
         </div>
       </main>
-    </div>
+    );
+  }
+
+  return (
+    <main className="fixed inset-0 bg-orange-50 flex flex-col">
+      {isJudged && <ResultEffect isCorrect={isCorrectLast} />}
+      <div className="absolute top-0 left-0 w-full h-2 bg-gray-200 z-20">
+        <div
+          className="h-full bg-green-500 transition-all duration-500"
+          style={{
+            width: `${((currentIndex + 1) / gameQuestions.length) * 100}%`,
+          }}
+        />
+      </div>
+      <div className="flex-1 relative">
+        <QuizImage src={currentQuestion.image} alt={currentQuestion.label} />
+        <div className="absolute top-4 right-4 bg-white/80 backdrop-blur px-4 py-2 rounded-full font-bold text-orange-600 shadow-md z-10">
+          {currentIndex + 1} / {gameQuestions.length}
+        </div>
+      </div>
+      <div className="h-32 bg-orange-100/90 backdrop-blur-sm flex flex-col items-center justify-center pb-safe z-10">
+        <div
+          className={`
+          w-20 h-20 rounded-full flex items-center justify-center text-4xl shadow-inner transition-all
+          ${
+            isListening
+              ? "bg-white border-4 border-red-400 animate-pulse text-red-500"
+              : isJudged
+              ? "bg-green-100 text-green-500"
+              : "bg-gray-200 text-gray-400"
+          }
+        `}
+        >
+          {isListening ? "👂" : isJudged ? (isCorrectLast ? "🎉" : "🤔") : "⏳"}
+        </div>
+        <p className="mt-2 text-sm font-bold text-gray-500">
+          {isListening
+            ? "きいてるよ！"
+            : isJudged
+            ? isCorrectLast
+              ? "せいかい！"
+              : "ちがうかな？"
+            : "ちょっとまってね"}
+        </p>
+      </div>
+    </main>
   );
 }
