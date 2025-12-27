@@ -25,41 +25,32 @@ export default function Home() {
 
   const [isJudged, setIsJudged] = useState(false);
   const [isCorrectLast, setIsCorrectLast] = useState(false);
-  const [selectedVoice, setSelectedVoice] =
-    useState<SpeechSynthesisVoice | null>(null);
 
   const { text, isListening, startListening } = useSpeechRecognition();
 
   const currentQuestion = gameQuestions[currentIndex];
 
-  useEffect(() => {
-    const loadVoices = () => {
-      const voices = window.speechSynthesis.getVoices();
-      const bestVoice =
-        voices.find(
-          (v) => v.lang.includes("ja") && v.name.includes("Google")
-        ) || voices.find((v) => v.lang.includes("ja"));
-      if (bestVoice) setSelectedVoice(bestVoice);
-    };
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-    loadVoices();
-  }, []);
+  // 🗣️ 喋る機能（ブラウザ標準のみのシンプル版に戻しました）
+  const speak = useCallback((message: string, onEnd?: () => void) => {
+    window.speechSynthesis.cancel();
+    const uttr = new SpeechSynthesisUtterance(message);
+    uttr.lang = "ja-JP";
 
-  const speak = useCallback(
-    (message: string, onEnd?: () => void) => {
-      window.speechSynthesis.cancel();
-      const uttr = new SpeechSynthesisUtterance(message);
-      uttr.lang = "ja-JP";
-      if (selectedVoice) uttr.voice = selectedVoice;
-      uttr.rate = 1.1;
-      uttr.pitch = 1.3;
-      uttr.onend = () => {
-        if (onEnd) setTimeout(onEnd, 500);
-      };
-      window.speechSynthesis.speak(uttr);
-    },
-    [selectedVoice]
-  );
+    // ブラウザ標準声のチューニング
+    const voices = window.speechSynthesis.getVoices();
+    const bestVoice =
+      voices.find((v) => v.lang.includes("ja") && v.name.includes("Google")) ||
+      voices.find((v) => v.lang.includes("ja"));
+    if (bestVoice) uttr.voice = bestVoice;
+
+    uttr.rate = 1.1;
+    uttr.pitch = 1.3;
+    uttr.onend = () => {
+      if (onEnd) setTimeout(onEnd, 500);
+    };
+
+    window.speechSynthesis.speak(uttr);
+  }, []);
 
   const handleGameStart = () => {
     const shuffled = shuffleArray(questions);
@@ -87,16 +78,13 @@ export default function Home() {
     }
   }, [currentIndex, gameQuestions.length, startListening, speak]);
 
-  // 🧠 判定ロジック（ここを修正しました！）
   const checkAnswer = (userVoice: string) => {
     if (isJudged) return;
 
-    // 1. 通常の正解判定（名前があってるか？）
     let isCorrect = currentQuestion.aliases.some((alias) =>
       userVoice.includes(alias)
     );
 
-    // 2. 追加ルール：「動物じゃない枠」のときは「動物じゃない」と言っても正解！
     if (currentQuestion.type === "not_animal") {
       const notAnimalKeywords = [
         "どうぶつじゃない",
@@ -104,7 +92,7 @@ export default function Home() {
         "動物じゃありません",
         "どうぶつじゃありません",
         "動物じゃありませーん",
-        "ちがう", // 「（動物と）ちがう！」というニュアンスも拾う
+        "ちがう",
       ];
       if (notAnimalKeywords.some((word) => userVoice.includes(word))) {
         isCorrect = true;
@@ -118,7 +106,6 @@ export default function Home() {
       if (currentQuestion.type === "animal") {
         speak(`せいかい！${currentQuestion.label}だね！`, handleNext);
       } else {
-        // 名前で答えても、「動物じゃない」と答えても、このセリフで返します
         speak(`せいかい！これは、どうぶつじゃ、ありませーーーん！`, handleNext);
       }
     } else {
@@ -137,25 +124,28 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, gameState]);
 
+  // 📺 1. タイトル画面
   if (gameState === "title") {
     return (
       <main className="fixed inset-0 bg-orange-50 flex flex-col items-center justify-center p-4">
-        <h1 className="text-4xl font-extrabold text-orange-600 mb-8 tracking-widest drop-shadow-md">
-          どうぶつ
-          <br />
-          クイズ
-        </h1>
-        <div className="bg-white p-6 rounded-3xl shadow-lg mb-10 w-full max-w-sm">
-          <p className="text-gray-600 text-center mb-4 font-bold">
+        {/* タイトル画像を表示 */}
+        <div className="w-full max-w-lg mb-8 drop-shadow-xl animate-bounce-slow">
+          <Image
+            src="/images/title.png"
+            alt="どうぶつクイズ！"
+            width={800}
+            height={400}
+            className="w-full h-auto object-contain"
+            priority
+          />
+        </div>
+
+        <div className="bg-white p-4 rounded-full shadow-md mb-10">
+          <p className="text-orange-600 font-bold text-lg">
             10もん チャレンジ！
           </p>
-          <div className="flex justify-center gap-4 text-4xl">
-            <span>🐶</span>
-            <span>🐱</span>
-            <span>🦁</span>
-            <span>🍄</span>
-          </div>
         </div>
+
         <button
           onClick={handleGameStart}
           className="bg-red-500 hover:bg-red-600 text-white text-3xl font-bold py-6 px-12 rounded-full shadow-xl transition transform hover:scale-105 active:scale-95 animate-bounce"
