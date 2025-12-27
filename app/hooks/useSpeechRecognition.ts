@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 
-// TypeScript用の型定義（ブラウザごとの差異を吸収）
 interface IWindow extends Window {
   webkitSpeechRecognition: any;
   SpeechRecognition: any;
@@ -12,7 +11,6 @@ export const useSpeechRecognition = () => {
   const [recognition, setRecognition] = useState<any>(null);
 
   useEffect(() => {
-    // ブラウザが音声認識に対応しているか確認
     const { webkitSpeechRecognition, SpeechRecognition } = window as unknown as IWindow;
     const SpeechRecognitionApi = SpeechRecognition || webkitSpeechRecognition;
 
@@ -22,9 +20,13 @@ export const useSpeechRecognition = () => {
     }
 
     const instance = new SpeechRecognitionApi();
-    instance.continuous = false; // 一言話したら終了
-    instance.lang = 'ja-JP';     // 日本語
-    instance.interimResults = false; // 確定した結果だけ取得
+    instance.continuous = false;
+    instance.lang = 'ja-JP';
+    instance.interimResults = false;
+
+    instance.onstart = () => {
+      setIsListening(true);
+    };
 
     instance.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
@@ -45,20 +47,38 @@ export const useSpeechRecognition = () => {
   }, []);
 
   const startListening = useCallback(() => {
-    if (recognition) {
-      setText(''); // 前回の結果をクリア
-      setIsListening(true);
-      try {
-        recognition.start();
-      } catch (e) {
-        console.error('開始エラー（すでに開始されている可能性があります）', e);
+    if (!recognition) return;
+
+    try {
+      // 前回の結果をクリア
+      setText('');
+      
+      // 🚀 修正ポイント: start() を呼んでみる
+      recognition.start();
+    } catch (e: any) {
+      // 🚀 修正ポイント: 
+      // 'InvalidStateError' は「すでに開始してるよ」という意味なので
+      // エラー画面を出さずに無視してOKです。
+      if (e.name === 'InvalidStateError') {
+        console.log('すでに音声認識は開始されています（無視してOK）');
+      } else {
+        // それ以外の本当のエラーだけ表示
+        console.error('開始エラー:', e);
       }
     }
   }, [recognition]);
 
+  const stopListening = useCallback(() => {
+    if (recognition) {
+      recognition.abort(); // 強制停止
+      setIsListening(false);
+    }
+  }, [recognition]);
+
   return {
-    text,           // 認識された文字
-    isListening,    // 聞き取っている最中かどうか
-    startListening, // 聞き取り開始関数
+    text,
+    isListening,
+    startListening,
+    stopListening, // 必要なら使えるようにエクスポートしておきます
   };
 };

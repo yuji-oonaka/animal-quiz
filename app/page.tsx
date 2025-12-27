@@ -26,17 +26,18 @@ export default function Home() {
   const [isJudged, setIsJudged] = useState(false);
   const [isCorrectLast, setIsCorrectLast] = useState(false);
 
+  // 間違い回数カウント
+  const [mistakeCount, setMistakeCount] = useState(0);
+
   const { text, isListening, startListening } = useSpeechRecognition();
 
   const currentQuestion = gameQuestions[currentIndex];
 
-  // 🗣️ 喋る機能（ブラウザ標準のみのシンプル版に戻しました）
   const speak = useCallback((message: string, onEnd?: () => void) => {
     window.speechSynthesis.cancel();
     const uttr = new SpeechSynthesisUtterance(message);
     uttr.lang = "ja-JP";
 
-    // ブラウザ標準声のチューニング
     const voices = window.speechSynthesis.getVoices();
     const bestVoice =
       voices.find((v) => v.lang.includes("ja") && v.name.includes("Google")) ||
@@ -57,15 +58,22 @@ export default function Home() {
     const selected = shuffled.slice(0, 10);
     setGameQuestions(selected);
     setCurrentIndex(0);
+    setMistakeCount(0);
     setGameState("playing");
     speak("どうぶつクイズ！ 10もん しょうぶ！ スタート！", () => {
       startListening();
     });
   };
 
+  const handleBackToTitle = () => {
+    window.speechSynthesis.cancel();
+    setGameState("title");
+  };
+
   const handleNext = useCallback(() => {
     setIsJudged(false);
     setIsCorrectLast(false);
+    setMistakeCount(0);
 
     if (currentIndex < gameQuestions.length - 1) {
       setCurrentIndex((prev) => prev + 1);
@@ -81,39 +89,58 @@ export default function Home() {
   const checkAnswer = (userVoice: string) => {
     if (isJudged) return;
 
+    // 1. 通常の正解判定
     let isCorrect = currentQuestion.aliases.some((alias) =>
       userVoice.includes(alias)
     );
 
+    // 2. 「動物じゃない枠」の判定強化！
     if (currentQuestion.type === "not_animal") {
       const notAnimalKeywords = [
         "どうぶつじゃない",
         "動物じゃない",
         "動物じゃありません",
         "どうぶつじゃありません",
+        "動物ではありません",
+        "どうぶつではありません", // 「では」に対応
         "動物じゃありませーん",
+        "どうぶつじゃありませーん",
         "ちがう",
+        "ちがい", // 「ちがいます」の「ちがい」も拾うように
+        "じゃない",
+        "じゃありません",
+        "ではありません", // 部分一致で拾う
       ];
       if (notAnimalKeywords.some((word) => userVoice.includes(word))) {
         isCorrect = true;
       }
     }
 
-    setIsJudged(true);
-    setIsCorrectLast(isCorrect);
-
     if (isCorrect) {
+      setIsJudged(true);
+      setIsCorrectLast(true);
+
       if (currentQuestion.type === "animal") {
         speak(`せいかい！${currentQuestion.label}だね！`, handleNext);
       } else {
         speak(`せいかい！これは、どうぶつじゃ、ありませーーーん！`, handleNext);
       }
     } else {
-      speak("あれ？ もういちど いってみてね", () => {
-        setIsJudged(false);
+      const nextMistakeCount = mistakeCount + 1;
+      setMistakeCount(nextMistakeCount);
+
+      if (nextMistakeCount >= 2) {
+        setIsJudged(true);
         setIsCorrectLast(false);
-        startListening();
-      });
+        speak(
+          `むずかしいかな？ せいかいは、${currentQuestion.label} でした！`,
+          handleNext
+        );
+      } else {
+        speak("あれ？ もういちど いってみてね", () => {
+          startListening();
+        });
+      }
     }
   };
 
@@ -124,28 +151,24 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, gameState]);
 
-  // 📺 1. タイトル画面
   if (gameState === "title") {
     return (
       <main className="fixed inset-0 bg-orange-50 flex flex-col items-center justify-center p-4">
-        {/* タイトル画像を表示 */}
         <div className="w-full max-w-lg mb-8 drop-shadow-xl animate-bounce-slow">
           <Image
             src="/images/title.png"
             alt="どうぶつクイズ！"
-            width={800}
-            height={400}
+            width={400}
+            height={200}
             className="w-full h-auto object-contain"
             priority
           />
         </div>
-
         <div className="bg-white p-4 rounded-full shadow-md mb-10">
           <p className="text-orange-600 font-bold text-lg">
             10もん チャレンジ！
           </p>
         </div>
-
         <button
           onClick={handleGameStart}
           className="bg-red-500 hover:bg-red-600 text-white text-3xl font-bold py-6 px-12 rounded-full shadow-xl transition transform hover:scale-105 active:scale-95 animate-bounce"
@@ -203,6 +226,26 @@ export default function Home() {
   return (
     <main className="fixed inset-0 bg-orange-50 flex flex-col">
       {isJudged && <ResultEffect isCorrect={isCorrectLast} />}
+
+      <button
+        onClick={handleBackToTitle}
+        className="absolute top-4 left-4 z-30 bg-white/80 p-2 rounded-full shadow text-gray-500 hover:bg-red-100 font-bold text-sm"
+      >
+        🏠 やめる
+      </button>
+
+      {/* 🛠️ デバッグ表示エリア（画面上部に小さく表示） */}
+      <div className="absolute top-4 left-0 right-0 flex justify-center pointer-events-none z-20">
+        <div
+          className={`
+          px-3 py-1 rounded-full text-xs font-mono text-white opacity-70
+          ${isListening ? "bg-red-500" : "bg-gray-500"}
+        `}
+        >
+          聞こえた文字: {text || "(待機中...)"}
+        </div>
+      </div>
+
       <div className="absolute top-0 left-0 w-full h-2 bg-gray-200 z-20">
         <div
           className="h-full bg-green-500 transition-all duration-500"
@@ -217,29 +260,39 @@ export default function Home() {
           {currentIndex + 1} / {gameQuestions.length}
         </div>
       </div>
+
       <div className="h-32 bg-orange-100/90 backdrop-blur-sm flex flex-col items-center justify-center pb-safe z-10">
-        <div
+        <button
+          onClick={() => {
+            if (!isListening && !isJudged) {
+              startListening();
+            }
+          }}
+          disabled={isJudged}
           className={`
-          w-20 h-20 rounded-full flex items-center justify-center text-4xl shadow-inner transition-all
-          ${
-            isListening
-              ? "bg-white border-4 border-red-400 animate-pulse text-red-500"
-              : isJudged
-              ? "bg-green-100 text-green-500"
-              : "bg-gray-200 text-gray-400"
-          }
-        `}
+            w-20 h-20 rounded-full flex items-center justify-center text-4xl shadow-inner transition-all
+            ${
+              isListening
+                ? "bg-white border-4 border-red-400 animate-pulse text-red-500 cursor-default"
+                : isJudged
+                ? isCorrectLast
+                  ? "bg-green-100 text-green-500 cursor-default"
+                  : "bg-blue-100 text-blue-500 cursor-default"
+                : "bg-orange-300 text-white hover:bg-orange-400 hover:scale-105 active:scale-95 cursor-pointer shadow-lg"
+            }
+          `}
         >
-          {isListening ? "👂" : isJudged ? (isCorrectLast ? "🎉" : "🤔") : "⏳"}
-        </div>
+          {isListening ? "👂" : isJudged ? (isCorrectLast ? "🎉" : "💡") : "🎙️"}
+        </button>
+
         <p className="mt-2 text-sm font-bold text-gray-500">
           {isListening
             ? "きいてるよ！"
             : isJudged
             ? isCorrectLast
               ? "せいかい！"
-              : "ちがうかな？"
-            : "ちょっとまってね"}
+              : "つぎにいこう！"
+            : "タップして おはなししてね"}
         </p>
       </div>
     </main>
