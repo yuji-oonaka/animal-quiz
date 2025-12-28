@@ -1,0 +1,1016 @@
+--- app/page.tsx ---
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { questions, Question } from "./data/questions";
+import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
+import { QuizImage } from "./components/QuizImage";
+import Image from "next/image";
+import confetti from "canvas-confetti";
+
+const shuffleArray = (array: Question[]) => {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+};
+
+export default function Home() {
+  const [gameState, setGameState] = useState<"title" | "playing" | "result">(
+    "title"
+  );
+  const [isPortrait, setIsPortrait] = useState(true);
+  const [isSeinoMode, setIsSeinoMode] = useState(false);
+  const [gameQuestions, setGameQuestions] = useState<Question[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isJudged, setIsJudged] = useState(false);
+  const [mistakeCount, setMistakeCount] = useState(0);
+  const [selectedInResult, setSelectedInResult] = useState<Question | null>(
+    null
+  );
+
+  const [isQuestionVisible, setIsQuestionVisible] = useState(false);
+  const [showStartText, setShowStartText] = useState(false);
+  const [showSeinoText, setShowSeinoText] = useState(false);
+
+  const { text, isListening, startListening, stopListening } =
+    useSpeechRecognition();
+  const currentQuestion = gameQuestions[currentIndex];
+
+  useEffect(() => {
+    const checkOrientation = () => {
+      setIsPortrait(window.innerHeight > window.innerWidth);
+    };
+
+    checkOrientation(); // 初回チェック
+    window.addEventListener("resize", checkOrientation);
+    return () => window.removeEventListener("resize", checkOrientation);
+  }, []);
+
+  // 音声合成の共通関数
+  const speak = useCallback((message: string, onEnd?: () => void) => {
+    window.speechSynthesis.cancel();
+    const uttr = new SpeechSynthesisUtterance(message);
+    uttr.lang = "ja-JP";
+    const voices = window.speechSynthesis.getVoices();
+    const bestVoice =
+      voices.find((v) => v.lang.includes("ja") && v.name.includes("Google")) ||
+      voices.find((v) => v.lang.includes("ja"));
+    if (bestVoice) uttr.voice = bestVoice;
+    uttr.rate = 1.3;
+    uttr.pitch = 1.3;
+    uttr.onend = () => {
+      if (onEnd) onEnd();
+    };
+    window.speechSynthesis.speak(uttr);
+  }, []);
+
+  const fireConfetti = useCallback(() => {
+    const duration = 1.5 * 1000;
+    const end = Date.now() + duration;
+    const frame = () => {
+      confetti({
+        particleCount: 3,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0, y: 0.8 },
+        colors: ["#ff0000", "#ffa500", "#ffff00"],
+      });
+      confetti({
+        particleCount: 3,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1, y: 0.8 },
+        colors: ["#00ff00", "#0000ff", "#ff00ff"],
+      });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    };
+    frame();
+  }, []);
+
+  const performSeinoAction = useCallback(() => {
+    setTimeout(() => {
+      setShowSeinoText(true);
+      speak("せーの！", () => {
+        setShowSeinoText(false);
+        startListening();
+      });
+    }, 400);
+  }, [speak, startListening]);
+
+  const handleGameStart = () => {
+    // 🚀 iOS対策: ユーザー操作（クリック）の直後に空の音を鳴らしてSpeechシステムをアンロック
+    const silentUttr = new SpeechSynthesisUtterance("");
+    window.speechSynthesis.speak(silentUttr);
+
+    const shuffled = shuffleArray(questions);
+    setGameQuestions(shuffled.slice(0, 10));
+    setCurrentIndex(0);
+    setMistakeCount(0);
+    setIsJudged(false);
+    setIsQuestionVisible(false);
+    setGameState("playing");
+
+    speak("どうぶつクイズ！", () => {
+      setShowStartText(true);
+      speak("スタート！", () => {
+        setShowStartText(false);
+        setIsQuestionVisible(true);
+        if (isSeinoMode) performSeinoAction();
+        else startListening();
+      });
+    });
+  };
+
+  const handleBackToTitle = () => {
+    window.speechSynthesis.cancel();
+    stopListening();
+    setGameState("title");
+  };
+
+  const handleNext = useCallback(() => {
+    confetti.reset();
+    setIsJudged(false);
+    setIsQuestionVisible(false);
+    setMistakeCount(0);
+    if (currentIndex < gameQuestions.length - 1) {
+      setCurrentIndex((prev) => prev + 1);
+      setTimeout(() => {
+        setIsQuestionVisible(true);
+        if (isSeinoMode) performSeinoAction();
+        else startListening();
+      }, 600);
+    } else {
+      setGameState("result");
+      speak("ぜんぶ おしまい！ よくがんばったね！");
+    }
+  }, [
+    currentIndex,
+    gameQuestions.length,
+    startListening,
+    speak,
+    isSeinoMode,
+    performSeinoAction,
+  ]);
+
+  const checkAnswer = useCallback(
+    (userVoice: string) => {
+      if (isJudged || !isQuestionVisible || !userVoice || showSeinoText) return;
+
+      // 通常の正解判定
+      let isCorrect = currentQuestion.aliases.some((alias) =>
+        userVoice.includes(alias)
+      );
+
+      // 「どうぶつじゃない」時の判定
+      if (currentQuestion.type === "not_animal") {
+        const notAnimalKeywords = ["じゃない", "ちがう", "ありませ", "違い"];
+        if (notAnimalKeywords.some((word) => userVoice.includes(word)))
+          isCorrect = true;
+      }
+
+      if (isCorrect) {
+        setIsJudged(true);
+        fireConfetti();
+        const delayNext = () => setTimeout(handleNext, 1200);
+
+        // 🚀 隠し要素（ゴマちゃん、ダンボなど）のチェック
+        const special = currentQuestion.specialReactions?.find((r) =>
+          r.keywords.some((k) => userVoice.includes(k))
+        );
+
+        if (special) {
+          // 💡 「よく知ってるね！」などの特別な反応
+          speak(special.message, delayNext);
+        } else if (currentQuestion.type === "not_animal") {
+          // 🚀 ドラムロール風の「溜め」演出
+          speak("せいかい！", () => {
+            setTimeout(() => {
+              speak("これは... どうぶつじゃ... ありませーーーん！", delayNext);
+            }, 400); // 0.4秒だけ溜める
+          });
+        } else {
+          // 通常の正解
+          speak(`せいかい！${currentQuestion.label}だね！`, delayNext);
+        }
+      } else {
+        // 判定ロジック：mistakeCountを更新
+        const nextCount = mistakeCount + 1;
+        setMistakeCount(nextCount);
+
+        if (nextCount >= 2) {
+          // 2回間違えたら正解発表
+          setIsJudged(true);
+          speak(
+            `むずかしいかな？ せいかいは、${currentQuestion.label} でした！`,
+            () => setTimeout(handleNext, 1200)
+          );
+        } else {
+          // 1回目なら「もういちど」
+          speak("あれ？ もういちど いってみてね", () => {
+            if (isSeinoMode) performSeinoAction();
+            else startListening();
+          });
+        }
+      }
+    },
+    [
+      isJudged,
+      isQuestionVisible,
+      showSeinoText,
+      currentQuestion,
+      mistakeCount,
+      isSeinoMode,
+      performSeinoAction,
+      fireConfetti,
+      speak,
+      handleNext,
+    ]
+  );
+
+  // 🚀 音声入力の監視（デバウンス）
+  useEffect(() => {
+    if (text && gameState === "playing") {
+      const timer = setTimeout(() => {
+        checkAnswer(text);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+    // ⚠️ 修正：checkAnswerを依存関係から外すことで、mistakeCount更新による再発火を防ぐ
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, gameState]);
+
+  if (gameState === "title") {
+    return (
+      <main className="fixed inset-0 flex flex-col items-center justify-center overflow-hidden">
+        {/* 🖼️ 背景画像レイヤー */}
+        <div className="absolute inset-0 -z-10">
+          {isPortrait ? (
+            /* 📱 縦画面の時だけこれを出す */
+            <Image
+              src="/images/title-vertical.jpg"
+              alt="背景 縦"
+              fill
+              className="object-cover"
+              priority
+              sizes="100vw"
+            />
+          ) : (
+            /* 💻 横画面の時だけこれを出す */
+            <Image
+              src="/images/title-beside.png"
+              alt="背景 横"
+              fill
+              className="object-cover"
+              priority
+              sizes="100vw"
+            />
+          )}
+          <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px]" />
+        </div>
+
+        <div className="relative z-10 flex flex-col items-center gap-8 p-6 w-full max-w-sm">
+          <div className="flex flex-col items-center gap-6 w-full bg-white/60 backdrop-blur-md p-8 rounded-[2.5rem] shadow-2xl border border-white/40">
+            <button
+              onClick={() => setIsSeinoMode(!isSeinoMode)}
+              className={`flex items-center gap-3 px-6 py-2 rounded-full border-2 transition-all shadow-sm ${
+                isSeinoMode
+                  ? "bg-green-100 border-green-500 text-green-700"
+                  : "bg-white border-gray-300 text-gray-500"
+              }`}
+            >
+              <div
+                className={`w-4 h-4 rounded-full ${
+                  isSeinoMode ? "bg-green-500" : "bg-gray-300"
+                }`}
+              />
+              <span className="font-bold text-sm">
+                {isSeinoMode ? "せーの！モード ON" : "せーの！モード OFF"}
+              </span>
+            </button>
+            <button
+              onClick={handleGameStart}
+              className="w-full bg-red-500 hover:bg-red-600 text-white text-4xl font-extrabold py-6 px-10 rounded-full shadow-[0_10px_0_rgb(185,28,28)] active:shadow-none active:translate-y-2 transition-all animate-bounce-slow"
+            >
+              スタート！
+            </button>
+            <p className="text-[10px] text-gray-400 font-bold">
+              ※iPhoneはマナーモードを解除してね
+            </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // 結果画面、プレイ画面のレンダリング（以下略 - 前回の構造を維持）
+  if (gameState === "result") {
+    return (
+      <main className="fixed inset-0 bg-yellow-50 overflow-y-auto py-10 px-4">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl font-bold text-orange-600 mb-6">
+            クリア おめでとう！
+          </h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-10">
+            {gameQuestions.map((q) => (
+              <button
+                key={q.id}
+                onClick={() => {
+                  setSelectedInResult(q);
+                  speak(q.explain);
+                }}
+                className="bg-white p-2 rounded-xl shadow-md transform active:scale-95 transition-transform"
+              >
+                <div className="aspect-square relative mb-2">
+                  <Image
+                    src={q.image}
+                    alt={q.label}
+                    fill
+                    className="object-contain p-1"
+                    sizes="20vw"
+                  />
+                </div>
+                <div className="text-center font-bold text-gray-700 text-sm">
+                  {q.label}
+                </div>
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={handleBackToTitle}
+            className="bg-blue-500 text-white text-xl font-bold py-4 px-10 rounded-full shadow-lg active:scale-95 transition-transform"
+          >
+            タイトルにもどる
+          </button>
+        </div>
+        {selectedInResult && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => setSelectedInResult(null)}
+          >
+            <div
+              className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-pop-in text-center relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-full aspect-square relative mb-6">
+                <Image
+                  src={selectedInResult.image}
+                  alt={selectedInResult.label}
+                  fill
+                  className="object-contain"
+                  sizes="400px"
+                />
+              </div>
+              <h3 className="text-3xl font-bold text-orange-500 mb-4">
+                {selectedInResult.label}
+              </h3>
+              <p className="text-lg text-gray-700 font-medium bg-orange-50 p-4 rounded-2xl">
+                {selectedInResult.explain}
+              </p>
+            </div>
+          </div>
+        )}
+      </main>
+    );
+  }
+
+  return (
+    <main className="fixed inset-0 bg-orange-50 flex flex-col landscape:flex-row overflow-hidden">
+      {(showStartText || showSeinoText) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none p-4 text-center">
+          <h1 className="text-7xl sm:text-8xl md:text-9xl font-black italic animate-pop-in leading-tight select-none">
+            {showStartText ? (
+              <span className="text-red-500 [text-shadow:4px_4px_0_#fff,-4px_-4px_0_#fff,4px_-4px_0_#fff,-4px_4px_0_#fff,0_8px_15px_rgba(0,0,0,0.3)]">
+                スタート！
+              </span>
+            ) : (
+              <span className="text-green-500 [text-shadow:4px_4px_0_#fff,-4px_-4px_0_#fff,4px_-4px_0_#fff,-4px_4px_0_#fff,0_8px_15px_rgba(0,0,0,0.3)]">
+                せーの！
+              </span>
+            )}
+          </h1>
+        </div>
+      )}
+      <div className="absolute bottom-32 left-0 right-0 flex justify-center pointer-events-none z-30 landscape:bottom-8 landscape:right-[16.6%] landscape:w-1/3">
+        <div className="bg-black/60 backdrop-blur-md text-white px-6 py-2 rounded-full text-sm font-bold border border-white/20 shadow-xl animate-fade-in min-w-40 text-center">
+          きこえたよ：
+          <span className="text-yellow-400">{text || "・・・"}</span>
+        </div>
+      </div>
+      <button
+        onClick={handleBackToTitle}
+        className="absolute top-4 left-4 z-40 bg-white/90 p-2 px-4 rounded-full shadow text-gray-500 font-bold text-sm active:bg-gray-100 transition-colors"
+      >
+        🏠 やめる
+      </button>
+      <div className="flex-1 relative landscape:w-2/3 landscape:h-full flex items-center justify-center">
+        {isQuestionVisible ? (
+          <QuizImage src={currentQuestion.image} alt={currentQuestion.label} />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-orange-100/30">
+            <span className="text-9xl text-orange-200 animate-pulse">？</span>
+          </div>
+        )}
+        <div className="absolute top-4 right-4 bg-white/80 px-4 py-2 rounded-full font-bold text-orange-600 shadow-md z-10">
+          {currentIndex + 1} / 10
+        </div>
+      </div>
+      <div className="h-32 bg-white/50 backdrop-blur-sm flex flex-col items-center justify-center z-20 landscape:h-full landscape:w-1/3 border-t landscape:border-t-0 landscape:border-l border-orange-200">
+        <button
+          onClick={() => {
+            if (!isListening && !isJudged) startListening();
+          }}
+          className={`w-20 h-20 rounded-full flex items-center justify-center text-4xl shadow-lg transition-all active:scale-90 ${
+            isListening
+              ? "bg-red-500 animate-pulse text-white"
+              : "bg-orange-400 text-white"
+          }`}
+        >
+          {isListening ? "👂" : "🎙️"}
+        </button>
+        <p className="mt-3 text-sm font-bold text-gray-600">
+          {isListening
+            ? "きいてるよ！"
+            : showSeinoText
+            ? "せーの！"
+            : "ボタンを おしてね"}
+        </p>
+      </div>
+    </main>
+  );
+}
+--- app/components/QuizImage.tsx ---
+import Image from "next/image";
+
+interface Props {
+  src: string;
+  alt: string;
+}
+
+export const QuizImage = ({ src, alt }: Props) => {
+  return (
+    <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+      {/* 画面いっぱいに広げるが、はみ出さないようにcontainを使う */}
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        className="object-contain"
+        sizes="100vw" // クイズ画面は基本的に大きく出るので 100vw でOK
+        priority
+      />
+    </div>
+  );
+};
+--- app/components/ResultEffect.tsx ---
+"use client";
+
+import { useEffect } from "react";
+import confetti from "canvas-confetti";
+
+interface ResultEffectProps {
+  isCorrect: boolean;
+}
+
+export const ResultEffect = ({ isCorrect }: ResultEffectProps) => {
+  useEffect(() => {
+    if (isCorrect) {
+      // 🚀 クイズ途中の演出を「左右からの打ち上げ」に変更
+      const duration = 2 * 1000; // 2秒間だけ
+      const end = Date.now() + duration;
+
+      const frame = () => {
+        // 左側からの打ち上げ
+        confetti({
+          particleCount: 2, // 一回に出す量を激減
+          angle: 60,
+          spread: 55,
+          origin: { x: 0, y: 0.8 }, // 画面左下寄り
+          colors: ["#ff0000", "#ffa500", "#ffff00"],
+          ticks: 200, // 滞在時間を短くして早く消えるように
+        });
+        // 右側からの打ち上げ
+        confetti({
+          particleCount: 2,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1, y: 0.8 }, // 画面右下寄り
+          colors: ["#00ff00", "#0000ff", "#ff00ff"],
+          ticks: 200,
+        });
+
+        if (Date.now() < end) {
+          requestAnimationFrame(frame);
+        }
+      };
+
+      frame();
+    }
+  }, [isCorrect]);
+
+  return null;
+};
+--- app/data/questions.ts ---
+export type QuestionType = 'animal' | 'not_animal';
+
+export interface SpecialReaction {
+  keywords: string[];
+  message: string;
+}
+
+export interface Question {
+  id: string;
+  label: string;      // 表示名
+  type: QuestionType; // カテゴリ
+  image: string;      // 画像パス
+  aliases: string[];  // 正解判定用キーワード
+  explain: string;    // 解説文
+  specialReactions?: SpecialReaction[];
+}
+
+export const questions: Question[] = [
+  // --- 🐶 どうぶつ枠 ---
+  {
+    id: 'dog',
+    label: 'いぬ',
+    type: 'animal',
+    image: '/images/inu.png',
+    aliases: ['いぬ', 'イヌ', '犬', 'ワンワン', 'わんわん', 'ドッグ'],
+    explain: 'ワンワンと なく かわいい どうぶつだよ'
+  },
+  {
+    id: 'cat',
+    label: 'ねこ',
+    type: 'animal',
+    image: '/images/neko.png',
+    aliases: ['ねこ', 'ネコ', '猫', 'ニャー', 'ニャン', 'キャット'],
+    explain: 'ニャーニャーと なく かわいい どうぶつだよ'
+  },
+  {
+    id: 'rabbit',
+    label: 'うさぎ',
+    type: 'animal',
+    image: '/images/usagi.png',
+    aliases: ['うさぎ', 'ウサギ', '兎', 'ラビット', 'ピョン'],
+    explain: 'みみが ながくて ぴょんぴょん はねるよ'
+  },
+  {
+    id: 'elephant',
+    label: 'ぞう',
+    type: 'animal',
+    image: '/images/zou.png',
+    aliases: ['ぞうさん', 'ゾウサン', 'ぞう', 'ゾウ', '象', 'ぞー', 'ゾー', 'ぞお', 'そう', 'どー', 'エレファント', 'ダンボ'],
+    explain: 'おはなが とっても ながい どうぶつだよ',
+    // 🚀 ダンボへの反応を追加
+    specialReactions: [
+      { keywords: ['ダンボ', 'だんぼ'], message: 'せいかい！わぁ！ディズニーのキャラクターの なまえだね！' }
+    ]
+  },
+  {
+    id: 'giraffe',
+    label: 'きりん',
+    type: 'animal',
+    image: '/images/kirin.png',
+    aliases: ['きりん', 'キリン', '麒麟', 'ジラフ'],
+    explain: 'くびが とっても ながい どうぶつだよ'
+  },
+  {
+    id: 'lion',
+    label: 'らいおん',
+    type: 'animal',
+    image: '/images/lion.png',
+    aliases: ['らいおん', 'ライオン', '獅子', 'ガオー'],
+    explain: 'かっこいい たてがみが あるね。ガオー！'
+  },
+  {
+    id: 'tiger',
+    label: 'とら',
+    type: 'animal',
+    image: '/images/tora.png',
+    // 🆕 「寅さん」「トラさん」などを追加
+    aliases: ['とら', 'トラ', '虎', 'とらさん', 'トラさん', '寅さん'], 
+    explain: 'しましま もようが かっこいい！ ガオーって なくよ'
+  },
+  {
+    id: 'bear',
+    label: 'くま',
+    type: 'animal',
+    image: '/images/kuma.png',
+    aliases: ['くま', 'クマ', '熊', 'ベア'],
+    explain: 'おおきくて ちからもちな 森の王様だよ'
+  },
+  {
+    id: 'cow',
+    label: 'うし',
+    type: 'animal',
+    image: '/images/usi.png',
+    aliases: ['うし', 'ウシ', '牛', 'カウ', 'モー'],
+    explain: 'モーモーと なくよ。ミルクを くれるね'
+  },
+  {
+    id: 'pig',
+    label: 'ぶた',
+    type: 'animal',
+    image: '/images/buta.png',
+    aliases: ['ぶた', 'ブタ', '豚', 'ピッグ', 'ブー'],
+    explain: 'ブーブーと なくよ。おはなが まるいね'
+  },
+  {
+    id: 'chicken',
+    label: 'にわとり',
+    type: 'animal',
+    image: '/images/niwatori.png',
+    aliases: ['にわとり', 'ニワトリ', '鶏', 'チキン', 'コケコッコー'],
+    explain: 'コケコッコーと あさを しらせてくれるよ'
+  },
+  {
+    id: 'sheep',
+    label: 'ひつじ',
+    type: 'animal',
+    image: '/images/hituji.png',
+    aliases: ['ひつじ', 'ヒツジ', '羊', 'シープ', 'メェ'],
+    explain: 'ふわふわの けが あたたかいね'
+  },
+  {
+    id: 'monkey',
+    label: 'さる',
+    type: 'animal',
+    image: '/images/saru.png',
+    aliases: ['さる', 'サル', '猿', 'モンキー', 'ウッキー'],
+    explain: '木登りが 上手で バナナが すきだよ'
+  },
+  {
+    id: 'gorilla',
+    label: 'ごりら',
+    type: 'animal',
+    image: '/images/golira.png',
+    aliases: ['ごりら', 'ゴリラ', 'ウホ'],
+    explain: 'むきむきで とっても つよいんだよ'
+  },
+  {
+    id: 'panda',
+    label: 'ぱんだ',
+    type: 'animal',
+    image: '/images/panda.png',
+    aliases: ['ぱんだ', 'パンダ'],
+    explain: 'しろと くろの もようが かわいいね'
+  },
+  {
+    id: 'penguin',
+    label: 'ぺんぎん',
+    type: 'animal',
+    image: '/images/pengin.png',
+    aliases: ['ぺんぎん', 'ペンギン'],
+    explain: 'とべないけど およぐのが じょうずだよ'
+  },
+  {
+    id: 'azarashi',
+    label: 'あざらし',
+    type: 'animal',
+    image: '/images/azarashi.png',
+    aliases: ['あざらし', 'アザラシ', 'ゴマちゃん', 'ごまちゃん', 'ゴマアザラシ'],
+    explain: 'こおりの うえで おひるね するのが だいすきだよ',
+    // 🚀 ゴマちゃんへの反応を追加
+    specialReactions: [
+      { keywords: ['ゴマちゃん', 'ごまちゃん'], message: 'せいかい！わぁ！よくしってるね、アニメのキャラクターで いるね！' }
+    ]
+  },
+  {
+    id: 'frog',
+    label: 'かえる',
+    type: 'animal',
+    image: '/images/kaeru.png',
+    aliases: ['かえる','帰る','カエル', '蛙', 'フロッグ', 'ケロ'],
+    explain: 'ケロケロと なくよ。雨が すきかな？'
+  },
+  {
+    id: 'turtle',
+    label: 'かめ',
+    type: 'animal',
+    image: '/images/kame.png',
+    aliases: ['かめ', 'カメ', '亀', 'タートル'],
+    explain: 'かたい こうらを もっているよ。ゆっくり あるくよ'
+  },
+  {
+    id: 'owl',
+    label: 'ふくろう',
+    type: 'animal',
+    image: '/images/hukurou.png',
+    aliases: ['ふくろう', 'フクロウ', '梟', 'ミミズク', 'ホーホー', 'ふくろ','袋'],
+    explain: '夜に なると 起きてくる 鳥さんだよ'
+  },
+  // --- 🆕 追加された動物たち ---
+  {
+    id: 'dolphin',
+    label: 'いるか',
+    type: 'animal',
+    image: '/images/iruka.png',
+    aliases: ['いるか', 'イルカ', 'ドルフィン'],
+    explain: '海を ジャンプして およぐ かしこい どうぶつだよ'
+  },
+  {
+    id: 'hippo',
+    label: 'かば',
+    type: 'animal',
+    image: '/images/kaba.png',
+    aliases: ['かば', 'カバ', 'ヒポポタマス'],
+    explain: 'お口が とっても おおきいね。水あそびが すきだよ'
+  },
+  {
+    id: 'koala',
+    label: 'こあら',
+    type: 'animal',
+    image: '/images/koara.png',
+    aliases: ['こあら', 'コアラ'],
+    explain: 'ユーカリの 木の上で いつも ねているね'
+  },
+  {
+    id: 'camel',
+    label: 'らくだ',
+    type: 'animal',
+    image: '/images/rakuda.png',
+    aliases: ['らくだ', 'ラクダ', 'キャメル'],
+    explain: 'せなかに コブが あるよ。砂漠を あるくのが とくいだよ'
+  },
+  {
+    id: 'deer',
+    label: 'しか',
+    type: 'animal',
+    image: '/images/sika.png',
+    aliases: ['しか', 'シカ', '鹿', 'バンビ', '歯科', '四肢'], 
+    explain: 'かっこいい ツノが あるね。森に すんでいるよ',
+    // 🚀 バンビへの反応を追加
+    specialReactions: [
+      { keywords: ['バンビ', 'ばんび'], message: 'せいかい！わぁ！えいがの キャラクターの なまえだね！' }
+    ]
+  },
+  {
+    id: 'horse',
+    label: 'うま',
+    type: 'animal',
+    image: '/images/uma.png',
+    aliases: ['うま', 'ウマ', '馬', 'ホース', 'ヒヒーン'],
+    explain: '走るのが とっても はやいよ。ヒヒーン！'
+  },
+
+  // --- ❌ 動物じゃありませーん枠 ---
+  {
+    id: 'mushroom',
+    label: 'きのこ',
+    type: 'not_animal',
+    image: '/images/kinoko.png',
+    aliases: ['きのこ', 'キノコ', '茸', 'マッシュルーム'],
+    explain: '森に 生えているけど どうぶつじゃないよ'
+  },
+  {
+    id: 'robot',
+    label: 'ろぼっと',
+    type: 'not_animal',
+    image: '/images/robot.png',
+    aliases: ['ろぼっと', 'ロボット', 'ロボ', 'マシーン'],
+    explain: '動くけど 機械だよ。ガシャンガシャン！'
+  },
+  {
+    id: 'plush',
+    label: 'ぬいぐるみ',
+    type: 'not_animal',
+    image: '/images/nuigurumi.png',
+    aliases: ['ぬいぐるみ', 'ヌイグルミ', '人形', 'ドール','くま','くまのぬいぐるみ'],
+    explain: 'ふわふわ しているけど 生きていないよ'
+    },
+  {
+    id: 'seaweed',
+    label: 'わかめ',
+    type: 'not_animal',
+    image: '/images/wakame.png',
+    aliases: ['わかめ', 'ワカメ', '海藻', 'かいそう'],
+    explain: '海の 中に あるけど 食べ物だよ'
+  },
+  {
+    id: 'car',
+    label: 'くるま',
+    type: 'not_animal',
+    image: '/images/kuruma.png',
+    aliases: ['くるま', 'クルマ', '車', '自動車', 'ブーブー'],
+    explain: 'タイヤが あって 人を 乗せて 走るよ'
+  },
+];--- app/layout.tsx ---
+import type { Metadata, Viewport } from "next"; // 👈 Viewportを追加
+import { Inter } from "next/font/google";
+import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"] });
+
+// 📱 1. ビューポート設定（スマホでの表示倍率や色など）
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#f97316", // Androidのバーの色
+};
+
+// 📝 2. メタデータ設定（アイコンやマニフェストの読み込み）
+export const metadata: Metadata = {
+  title: "みんなでどうぶつクイズ！",
+  description: "声で答える！子供向け参加型クイズアプリ",
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/favicon.ico" }, // 標準
+      { url: "/favicon-96x96.png", sizes: "96x96", type: "image/png" }, // 🆕 追加
+    ],
+    apple: [{ url: "/apple-touch-icon.png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "どうぶつクイズ",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="ja">
+      <body className={inter.className}>{children}</body>
+    </html>
+  );
+}
+--- app/hooks/useSpeechRecognition.ts ---
+import { useState, useEffect, useCallback } from 'react';
+
+interface IWindow extends Window {
+  webkitSpeechRecognition: any;
+  SpeechRecognition: any;
+}
+
+export const useSpeechRecognition = () => {
+  const [text, setText] = useState<string>('');
+  const [isListening, setIsListening] = useState<boolean>(false);
+  const [recognition, setRecognition] = useState<any>(null);
+
+  useEffect(() => {
+    const { webkitSpeechRecognition, SpeechRecognition } = window as unknown as IWindow;
+    const SpeechRecognitionApi = SpeechRecognition || webkitSpeechRecognition;
+
+    if (!SpeechRecognitionApi) return;
+
+    const instance = new SpeechRecognitionApi();
+    instance.continuous = false;
+    instance.lang = 'ja-JP';
+    instance.interimResults = false;
+
+    instance.onstart = () => setIsListening(true);
+    instance.onresult = (event: any) => {
+      setText(event.results[0][0].transcript);
+      setIsListening(false);
+    };
+    instance.onend = () => setIsListening(false);
+    instance.onerror = () => setIsListening(false);
+
+    setRecognition(instance);
+  }, []);
+
+  const startListening = useCallback(() => {
+    if (!recognition) return;
+    try {
+      // 🚀 iOS対策：一度abortして確実にリセット
+      recognition.abort();
+      setText('');
+      // 少し間を置いてから開始するとiOSで安定します
+      setTimeout(() => {
+        recognition.start();
+      }, 100);
+    } catch (e: any) {
+      if (e.name !== 'InvalidStateError') console.error(e);
+    }
+  }, [recognition]);
+
+  const stopListening = useCallback(() => {
+    if (recognition) {
+      recognition.abort();
+      setIsListening(false);
+    }
+  }, [recognition]);
+
+  return { text, isListening, startListening, stopListening };
+};--- app/globals.css ---
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@keyframes bounce-in {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-bounce-in {
+  animation: bounce-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes bounce-slow {
+
+  0%,
+  100% {
+    transform: translateY(-5px);
+  }
+
+  50% {
+    transform: translateY(5px);
+  }
+}
+
+.animate-bounce-slow {
+  animation: bounce-slow 3s ease-in-out infinite;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pop-in {
+  0% {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out forwards;
+}
+
+.animate-pop-in {
+  animation: pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes pop-in {
+  0% {
+    transform: scale(0.5) rotate(-10deg);
+    opacity: 0;
+  }
+
+  70% {
+    transform: scale(1.2) rotate(5deg);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+.animate-pop-in {
+  animation: pop-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}

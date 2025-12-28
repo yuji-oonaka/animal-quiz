@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { questions, Question } from "./data/questions";
 import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
 import { QuizImage } from "./components/QuizImage";
-import { ResultEffect } from "./components/ResultEffect";
 import Image from "next/image";
+import confetti from "canvas-confetti";
 
 const shuffleArray = (array: Question[]) => {
   const newArray = [...array];
@@ -20,287 +20,421 @@ export default function Home() {
   const [gameState, setGameState] = useState<"title" | "playing" | "result">(
     "title"
   );
+  const [isPortrait, setIsPortrait] = useState(true);
+  const [isSeinoMode, setIsSeinoMode] = useState(false);
   const [gameQuestions, setGameQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-
   const [isJudged, setIsJudged] = useState(false);
-  const [isCorrectLast, setIsCorrectLast] = useState(false);
-
-  // 間違い回数カウント
   const [mistakeCount, setMistakeCount] = useState(0);
+  const [selectedInResult, setSelectedInResult] = useState<Question | null>(
+    null
+  );
 
-  const { text, isListening, startListening } = useSpeechRecognition();
+  const [isQuestionVisible, setIsQuestionVisible] = useState(false);
+  const [showStartText, setShowStartText] = useState(false);
+  const [showSeinoText, setShowSeinoText] = useState(false);
 
+  const { text, isListening, startListening, stopListening } =
+    useSpeechRecognition();
   const currentQuestion = gameQuestions[currentIndex];
 
+  useEffect(() => {
+    const checkOrientation = () => {
+      setIsPortrait(window.innerHeight > window.innerWidth);
+    };
+
+    checkOrientation(); // 初回チェック
+    window.addEventListener("resize", checkOrientation);
+    return () => window.removeEventListener("resize", checkOrientation);
+  }, []);
+
+  // 音声合成の共通関数
   const speak = useCallback((message: string, onEnd?: () => void) => {
     window.speechSynthesis.cancel();
     const uttr = new SpeechSynthesisUtterance(message);
     uttr.lang = "ja-JP";
-
     const voices = window.speechSynthesis.getVoices();
     const bestVoice =
       voices.find((v) => v.lang.includes("ja") && v.name.includes("Google")) ||
       voices.find((v) => v.lang.includes("ja"));
     if (bestVoice) uttr.voice = bestVoice;
-
-    uttr.rate = 1.1;
+    uttr.rate = 1.3;
     uttr.pitch = 1.3;
     uttr.onend = () => {
-      if (onEnd) setTimeout(onEnd, 500);
+      if (onEnd) onEnd();
     };
-
     window.speechSynthesis.speak(uttr);
   }, []);
 
+  const fireConfetti = useCallback(() => {
+    const duration = 1.5 * 1000;
+    const end = Date.now() + duration;
+    const frame = () => {
+      confetti({
+        particleCount: 3,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0, y: 0.8 },
+        colors: ["#ff0000", "#ffa500", "#ffff00"],
+      });
+      confetti({
+        particleCount: 3,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1, y: 0.8 },
+        colors: ["#00ff00", "#0000ff", "#ff00ff"],
+      });
+      if (Date.now() < end) requestAnimationFrame(frame);
+    };
+    frame();
+  }, []);
+
+  const performSeinoAction = useCallback(() => {
+    setTimeout(() => {
+      setShowSeinoText(true);
+      speak("せーの！", () => {
+        setShowSeinoText(false);
+        startListening();
+      });
+    }, 400);
+  }, [speak, startListening]);
+
   const handleGameStart = () => {
+    // 🚀 iOS対策: ユーザー操作（クリック）の直後に空の音を鳴らしてSpeechシステムをアンロック
+    const silentUttr = new SpeechSynthesisUtterance("");
+    window.speechSynthesis.speak(silentUttr);
+
     const shuffled = shuffleArray(questions);
-    const selected = shuffled.slice(0, 10);
-    setGameQuestions(selected);
+    setGameQuestions(shuffled.slice(0, 10));
     setCurrentIndex(0);
     setMistakeCount(0);
+    setIsJudged(false);
+    setIsQuestionVisible(false);
     setGameState("playing");
-    speak("どうぶつクイズ！ 10もん しょうぶ！ スタート！", () => {
-      startListening();
+
+    speak("どうぶつクイズ！", () => {
+      setShowStartText(true);
+      speak("スタート！", () => {
+        setShowStartText(false);
+        setIsQuestionVisible(true);
+        if (isSeinoMode) performSeinoAction();
+        else startListening();
+      });
     });
   };
 
   const handleBackToTitle = () => {
     window.speechSynthesis.cancel();
+    stopListening();
     setGameState("title");
   };
 
   const handleNext = useCallback(() => {
+    confetti.reset();
     setIsJudged(false);
-    setIsCorrectLast(false);
+    setIsQuestionVisible(false);
     setMistakeCount(0);
-
     if (currentIndex < gameQuestions.length - 1) {
       setCurrentIndex((prev) => prev + 1);
       setTimeout(() => {
-        startListening();
-      }, 800);
+        setIsQuestionVisible(true);
+        if (isSeinoMode) performSeinoAction();
+        else startListening();
+      }, 600);
     } else {
       setGameState("result");
       speak("ぜんぶ おしまい！ よくがんばったね！");
     }
-  }, [currentIndex, gameQuestions.length, startListening, speak]);
+  }, [
+    currentIndex,
+    gameQuestions.length,
+    startListening,
+    speak,
+    isSeinoMode,
+    performSeinoAction,
+  ]);
 
-  const checkAnswer = (userVoice: string) => {
-    if (isJudged) return;
+  const checkAnswer = useCallback(
+    (userVoice: string) => {
+      if (isJudged || !isQuestionVisible || !userVoice || showSeinoText) return;
 
-    // 1. 通常の正解判定
-    let isCorrect = currentQuestion.aliases.some((alias) =>
-      userVoice.includes(alias)
-    );
+      // 通常の正解判定
+      let isCorrect = currentQuestion.aliases.some((alias) =>
+        userVoice.includes(alias)
+      );
 
-    // 2. 「動物じゃない枠」の判定強化
-    if (currentQuestion.type === "not_animal") {
-      const notAnimalKeywords = [
-        "どうぶつじゃない",
-        "動物じゃない",
-        "動物じゃありません",
-        "どうぶつじゃありません",
-        "動物ではありません",
-        "どうぶつではありません",
-        "動物じゃありませーん",
-        "どうぶつじゃありませーん",
-        "ちがう",
-        "ちがい",
-        "じゃない",
-        "じゃありません",
-        "ではありません",
-      ];
-      if (notAnimalKeywords.some((word) => userVoice.includes(word))) {
-        isCorrect = true;
+      // 「どうぶつじゃない」時の判定
+      if (currentQuestion.type === "not_animal") {
+        const notAnimalKeywords = ["じゃない", "ちがう", "ありませ", "違い"];
+        if (notAnimalKeywords.some((word) => userVoice.includes(word)))
+          isCorrect = true;
       }
-    }
 
-    if (isCorrect) {
-      setIsJudged(true);
-      setIsCorrectLast(true);
-
-      if (currentQuestion.type === "animal") {
-        speak(`せいかい！${currentQuestion.label}だね！`, handleNext);
-      } else {
-        speak(`せいかい！これは、どうぶつじゃ、ありませーーーん！`, handleNext);
-      }
-    } else {
-      const nextMistakeCount = mistakeCount + 1;
-      setMistakeCount(nextMistakeCount);
-
-      if (nextMistakeCount >= 2) {
+      if (isCorrect) {
         setIsJudged(true);
-        setIsCorrectLast(false);
-        speak(
-          `むずかしいかな？ せいかいは、${currentQuestion.label} でした！`,
-          handleNext
-        );
-      } else {
-        speak("あれ？ もういちど いってみてね", () => {
-          startListening();
-        });
-      }
-    }
-  };
+        fireConfetti();
+        const delayNext = () => setTimeout(handleNext, 1200);
 
+        // 🚀 隠し要素（ゴマちゃん、ダンボなど）のチェック
+        const special = currentQuestion.specialReactions?.find((r) =>
+          r.keywords.some((k) => userVoice.includes(k))
+        );
+
+        if (special) {
+          // 💡 「よく知ってるね！」などの特別な反応
+          speak(special.message, delayNext);
+        } else if (currentQuestion.type === "not_animal") {
+          // 🚀 ドラムロール風の「溜め」演出
+          speak("せいかい！", () => {
+            setTimeout(() => {
+              speak("これは... どうぶつじゃ... ありませーーーん！", delayNext);
+            }, 400); // 0.4秒だけ溜める
+          });
+        } else {
+          // 通常の正解
+          speak(`せいかい！${currentQuestion.label}だね！`, delayNext);
+        }
+      } else {
+        // 判定ロジック：mistakeCountを更新
+        const nextCount = mistakeCount + 1;
+        setMistakeCount(nextCount);
+
+        if (nextCount >= 2) {
+          // 2回間違えたら正解発表
+          setIsJudged(true);
+          speak(
+            `むずかしいかな？ せいかいは、${currentQuestion.label} でした！`,
+            () => setTimeout(handleNext, 1200)
+          );
+        } else {
+          // 1回目なら「もういちど」
+          speak("あれ？ もういちど いってみてね", () => {
+            if (isSeinoMode) performSeinoAction();
+            else startListening();
+          });
+        }
+      }
+    },
+    [
+      isJudged,
+      isQuestionVisible,
+      showSeinoText,
+      currentQuestion,
+      mistakeCount,
+      isSeinoMode,
+      performSeinoAction,
+      fireConfetti,
+      speak,
+      handleNext,
+    ]
+  );
+
+  // 🚀 音声入力の監視（デバウンス）
   useEffect(() => {
-    if (text && !isJudged && gameState === "playing") {
-      checkAnswer(text);
+    if (text && gameState === "playing") {
+      const timer = setTimeout(() => {
+        checkAnswer(text);
+      }, 800);
+      return () => clearTimeout(timer);
     }
+    // ⚠️ 修正：checkAnswerを依存関係から外すことで、mistakeCount更新による再発火を防ぐ
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, gameState]);
 
-  // 📺 1. タイトル画面
   if (gameState === "title") {
     return (
-      <main className="fixed inset-0 bg-orange-50 flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-lg mb-8 drop-shadow-xl animate-bounce-slow">
-          <Image
-            src="/images/title.png"
-            alt="どうぶつクイズ！"
-            width={400}
-            height={200}
-            className="w-full h-auto object-contain"
-            priority
-          />
+      <main className="fixed inset-0 flex flex-col items-center justify-center overflow-hidden">
+        {/* 🖼️ 背景画像レイヤー */}
+        <div className="absolute inset-0 -z-10">
+          {isPortrait ? (
+            /* 📱 縦画面の時だけこれを出す */
+            <Image
+              src="/images/title-vertical.jpg"
+              alt="背景 縦"
+              fill
+              className="object-cover"
+              priority
+              sizes="100vw"
+            />
+          ) : (
+            /* 💻 横画面の時だけこれを出す */
+            <Image
+              src="/images/title-beside.png"
+              alt="背景 横"
+              fill
+              className="object-cover"
+              priority
+              sizes="100vw"
+            />
+          )}
+          <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px]" />
         </div>
-        <div className="bg-white p-4 rounded-full shadow-md mb-10">
-          <p className="text-orange-600 font-bold text-lg">
-            10もん チャレンジ！
-          </p>
+
+        <div className="relative z-10 flex flex-col items-center gap-8 p-6 w-full max-w-sm">
+          <div className="flex flex-col items-center gap-6 w-full bg-white/60 backdrop-blur-md p-8 rounded-[2.5rem] shadow-2xl border border-white/40">
+            <button
+              onClick={() => setIsSeinoMode(!isSeinoMode)}
+              className={`flex items-center gap-3 px-6 py-2 rounded-full border-2 transition-all shadow-sm ${
+                isSeinoMode
+                  ? "bg-green-100 border-green-500 text-green-700"
+                  : "bg-white border-gray-300 text-gray-500"
+              }`}
+            >
+              <div
+                className={`w-4 h-4 rounded-full ${
+                  isSeinoMode ? "bg-green-500" : "bg-gray-300"
+                }`}
+              />
+              <span className="font-bold text-sm">
+                {isSeinoMode ? "せーの！モード ON" : "せーの！モード OFF"}
+              </span>
+            </button>
+            <button
+              onClick={handleGameStart}
+              className="w-full bg-red-500 hover:bg-red-600 text-white text-4xl font-extrabold py-6 px-10 rounded-full shadow-[0_10px_0_rgb(185,28,28)] active:shadow-none active:translate-y-2 transition-all animate-bounce-slow"
+            >
+              スタート！
+            </button>
+            <p className="text-[10px] text-gray-400 font-bold">
+              ※iPhoneはマナーモードを解除してね
+            </p>
+          </div>
         </div>
-        <button
-          onClick={handleGameStart}
-          className="bg-red-500 hover:bg-red-600 text-white text-3xl font-bold py-6 px-12 rounded-full shadow-xl transition transform hover:scale-105 active:scale-95 animate-bounce"
-        >
-          スタート！
-        </button>
       </main>
     );
   }
 
-  // 📺 3. リザルト画面
+  // 結果画面、プレイ画面のレンダリング（以下略 - 前回の構造を維持）
   if (gameState === "result") {
     return (
       <main className="fixed inset-0 bg-yellow-50 overflow-y-auto py-10 px-4">
-        <ResultEffect isCorrect={true} />
-        <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-3xl font-bold text-orange-600 mb-2">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl font-bold text-orange-600 mb-6">
             クリア おめでとう！
           </h2>
-          <p className="text-gray-600 mb-8">きょう であった なかまたちだよ</p>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-10">
-            {gameQuestions.map((q, i) => (
-              <div
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-10">
+            {gameQuestions.map((q) => (
+              <button
                 key={q.id}
-                className="bg-white p-2 rounded-xl shadow-md transform hover:scale-105 transition-transform"
-                style={{ animationDelay: `${i * 100}ms` }}
+                onClick={() => {
+                  setSelectedInResult(q);
+                  speak(q.explain);
+                }}
+                className="bg-white p-2 rounded-xl shadow-md transform active:scale-95 transition-transform"
               >
                 <div className="aspect-square relative mb-2">
                   <Image
                     src={q.image}
                     alt={q.label}
                     fill
-                    className="object-contain"
+                    className="object-contain p-1"
+                    sizes="20vw"
                   />
                 </div>
                 <div className="text-center font-bold text-gray-700 text-sm">
                   {q.label}
                 </div>
-                <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold w-8 h-8 flex items-center justify-center rounded-full border-2 border-white shadow">
-                  OK
-                </div>
-              </div>
+              </button>
             ))}
           </div>
           <button
-            onClick={() => setGameState("title")}
-            className="bg-blue-500 hover:bg-blue-600 text-white text-xl font-bold py-4 px-10 rounded-full shadow-lg transition transform hover:scale-105"
+            onClick={handleBackToTitle}
+            className="bg-blue-500 text-white text-xl font-bold py-4 px-10 rounded-full shadow-lg active:scale-95 transition-transform"
           >
             タイトルにもどる
           </button>
         </div>
+        {selectedInResult && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => setSelectedInResult(null)}
+          >
+            <div
+              className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-pop-in text-center relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="w-full aspect-square relative mb-6">
+                <Image
+                  src={selectedInResult.image}
+                  alt={selectedInResult.label}
+                  fill
+                  className="object-contain"
+                  sizes="400px"
+                />
+              </div>
+              <h3 className="text-3xl font-bold text-orange-500 mb-4">
+                {selectedInResult.label}
+              </h3>
+              <p className="text-lg text-gray-700 font-medium bg-orange-50 p-4 rounded-2xl">
+                {selectedInResult.explain}
+              </p>
+            </div>
+          </div>
+        )}
       </main>
     );
   }
 
-  // 📺 2. ゲーム画面（ここを修正しました！）
   return (
-    // landscape:flex-row を追加して、横向きの時は横並びレイアウトにする
-    <main className="fixed inset-0 bg-orange-50 flex flex-col landscape:flex-row">
-      {isJudged && <ResultEffect isCorrect={isCorrectLast} />}
-
+    <main className="fixed inset-0 bg-orange-50 flex flex-col landscape:flex-row overflow-hidden">
+      {(showStartText || showSeinoText) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none p-4 text-center">
+          <h1 className="text-7xl sm:text-8xl md:text-9xl font-black italic animate-pop-in leading-tight select-none">
+            {showStartText ? (
+              <span className="text-red-500 [text-shadow:4px_4px_0_#fff,-4px_-4px_0_#fff,4px_-4px_0_#fff,-4px_4px_0_#fff,0_8px_15px_rgba(0,0,0,0.3)]">
+                スタート！
+              </span>
+            ) : (
+              <span className="text-green-500 [text-shadow:4px_4px_0_#fff,-4px_-4px_0_#fff,4px_-4px_0_#fff,-4px_4px_0_#fff,0_8px_15px_rgba(0,0,0,0.3)]">
+                せーの！
+              </span>
+            )}
+          </h1>
+        </div>
+      )}
+      <div className="absolute bottom-32 left-0 right-0 flex justify-center pointer-events-none z-30 landscape:bottom-8 landscape:right-[16.6%] landscape:w-1/3">
+        <div className="bg-black/60 backdrop-blur-md text-white px-6 py-2 rounded-full text-sm font-bold border border-white/20 shadow-xl animate-fade-in min-w-40 text-center">
+          きこえたよ：
+          <span className="text-yellow-400">{text || "・・・"}</span>
+        </div>
+      </div>
       <button
         onClick={handleBackToTitle}
-        className="absolute top-4 left-4 z-30 bg-white/80 p-2 rounded-full shadow text-gray-500 hover:bg-red-100 font-bold text-sm"
+        className="absolute top-4 left-4 z-40 bg-white/90 p-2 px-4 rounded-full shadow text-gray-500 font-bold text-sm active:bg-gray-100 transition-colors"
       >
         🏠 やめる
       </button>
-
-      {/* デバッグ表示（横向き時は左上に寄せる） */}
-      <div className="absolute top-4 left-0 right-0 flex justify-center pointer-events-none z-20 landscape:justify-start landscape:left-20 landscape:top-6">
-        <div
-          className={`
-          px-3 py-1 rounded-full text-xs font-mono text-white opacity-70
-          ${isListening ? "bg-red-500" : "bg-gray-500"}
-        `}
-        >
-          聞こえた文字: {text || "(待機中...)"}
+      <div className="flex-1 relative landscape:w-2/3 landscape:h-full flex items-center justify-center">
+        {isQuestionVisible ? (
+          <QuizImage src={currentQuestion.image} alt={currentQuestion.label} />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-orange-100/30">
+            <span className="text-9xl text-orange-200 animate-pulse">？</span>
+          </div>
+        )}
+        <div className="absolute top-4 right-4 bg-white/80 px-4 py-2 rounded-full font-bold text-orange-600 shadow-md z-10">
+          {currentIndex + 1} / 10
         </div>
       </div>
-
-      {/* プログレスバー */}
-      <div className="absolute top-0 left-0 w-full h-2 bg-gray-200 z-20">
-        <div
-          className="h-full bg-green-500 transition-all duration-500"
-          style={{
-            width: `${((currentIndex + 1) / gameQuestions.length) * 100}%`,
-          }}
-        />
-      </div>
-
-      {/* 画像エリア（横向き時は画面の左側2/3を使う） */}
-      <div className="flex-1 relative landscape:h-full landscape:w-2/3">
-        <QuizImage src={currentQuestion.image} alt={currentQuestion.label} />
-        <div className="absolute top-4 right-4 bg-white/80 backdrop-blur px-4 py-2 rounded-full font-bold text-orange-600 shadow-md z-10">
-          {currentIndex + 1} / {gameQuestions.length}
-        </div>
-      </div>
-
-      {/* 操作エリア（横向き時は画面の右側1/3を使い、左に境界線をつける） */}
-      <div className="h-32 bg-orange-100/90 backdrop-blur-sm flex flex-col items-center justify-center pb-safe z-10 landscape:h-full landscape:w-1/3 landscape:border-l-4 landscape:border-orange-200">
+      <div className="h-32 bg-white/50 backdrop-blur-sm flex flex-col items-center justify-center z-20 landscape:h-full landscape:w-1/3 border-t landscape:border-t-0 landscape:border-l border-orange-200">
         <button
           onClick={() => {
-            if (!isListening && !isJudged) {
-              startListening();
-            }
+            if (!isListening && !isJudged) startListening();
           }}
-          disabled={isJudged}
-          className={`
-            w-20 h-20 rounded-full flex items-center justify-center text-4xl shadow-inner transition-all
-            ${
-              isListening
-                ? "bg-white border-4 border-red-400 animate-pulse text-red-500 cursor-default"
-                : isJudged
-                ? isCorrectLast
-                  ? "bg-green-100 text-green-500 cursor-default"
-                  : "bg-blue-100 text-blue-500 cursor-default"
-                : "bg-orange-300 text-white hover:bg-orange-400 hover:scale-105 active:scale-95 cursor-pointer shadow-lg"
-            }
-          `}
+          className={`w-20 h-20 rounded-full flex items-center justify-center text-4xl shadow-lg transition-all active:scale-90 ${
+            isListening
+              ? "bg-red-500 animate-pulse text-white"
+              : "bg-orange-400 text-white"
+          }`}
         >
-          {isListening ? "👂" : isJudged ? (isCorrectLast ? "🎉" : "💡") : "🎙️"}
+          {isListening ? "👂" : "🎙️"}
         </button>
-
-        <p className="mt-2 text-sm font-bold text-gray-500">
+        <p className="mt-3 text-sm font-bold text-gray-600">
           {isListening
             ? "きいてるよ！"
-            : isJudged
-            ? isCorrectLast
-              ? "せいかい！"
-              : "つぎにいこう！"
-            : "タップして おはなししてね"}
+            : showSeinoText
+            ? "せーの！"
+            : "ボタンを おしてね"}
         </p>
       </div>
     </main>
