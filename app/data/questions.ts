@@ -46,7 +46,7 @@ export const questions: Question[] = [
     label: 'ぞう',
     type: 'animal',
     image: '/images/zou.png',
-    aliases: ['ぞうさん', 'ゾウサン', 'ぞう', 'ゾウ', '象', 'ぞー', 'ゾー', 'ぞお', 'そう', 'どー', 'エレファント', 'ダンボ'],
+    aliases: ['ぞうさん', 'ゾウサン', 'ぞう', 'ゾウ', '象', 'ぞー', 'ゾー', 'ぞお', 'そう', 'どー','じゃあ', 'エレファント', 'ダンボ'],
     explain: 'おはなが とっても ながい どうぶつだよ',
     // 🚀 ダンボへの反応を追加
     specialReactions: [
@@ -84,7 +84,7 @@ export const questions: Question[] = [
     type: 'animal',
     image: '/images/kuma.png',
     aliases: ['くま', 'クマ', '熊', 'ベア'],
-    explain: 'おおきくて ちからもちな 森の王様だよ'
+    explain: 'おおきくて ちからもちな もりのおうさまだよ'
   },
   {
     id: 'cow',
@@ -124,7 +124,7 @@ export const questions: Question[] = [
     type: 'animal',
     image: '/images/saru.png',
     aliases: ['さる', 'サル', '猿', 'モンキー', 'ウッキー'],
-    explain: '木登りが 上手で バナナが すきだよ'
+    explain: 'きのぼりが じょうずで バナナが すきだよ'
   },
   {
     id: 'gorilla',
@@ -167,7 +167,7 @@ export const questions: Question[] = [
     type: 'animal',
     image: '/images/kaeru.png',
     aliases: ['かえる','帰る','カエル', '蛙', 'フロッグ', 'ケロ'],
-    explain: 'ケロケロと なくよ。雨が すきかな？'
+    explain: 'ケロケロと なくよ。あめが すきかな？'
   },
   {
     id: 'turtle',
@@ -183,7 +183,7 @@ export const questions: Question[] = [
     type: 'animal',
     image: '/images/hukurou.png',
     aliases: ['ふくろう', 'フクロウ', '梟', 'ミミズク', 'ホーホー', 'ふくろ','袋'],
-    explain: '夜に なると 起きてくる 鳥さんだよ'
+    explain: 'よるに なると おきてくる とりさんだよ'
   },
   // --- 🆕 追加された動物たち ---
   {
@@ -192,7 +192,7 @@ export const questions: Question[] = [
     type: 'animal',
     image: '/images/iruka.png',
     aliases: ['いるか', 'イルカ', 'ドルフィン'],
-    explain: '海を ジャンプして およぐ かしこい どうぶつだよ'
+    explain: 'うみを ジャンプして およぐ かしこい どうぶつだよ'
   },
   {
     id: 'hippo',
@@ -200,7 +200,7 @@ export const questions: Question[] = [
     type: 'animal',
     image: '/images/kaba.png',
     aliases: ['かば', 'カバ', 'ヒポポタマス'],
-    explain: 'お口が とっても おおきいね。水あそびが すきだよ'
+    explain: 'おくちが とっても おおきいね。みずあそびが すきだよ'
   },
   {
     id: 'koala',
@@ -208,7 +208,7 @@ export const questions: Question[] = [
     type: 'animal',
     image: '/images/koara.png',
     aliases: ['こあら', 'コアラ'],
-    explain: 'ユーカリの 木の上で いつも ねているね'
+    explain: 'ユーカリの きのうえで いつも ねているね'
   },
   {
     id: 'camel',
@@ -216,7 +216,7 @@ export const questions: Question[] = [
     type: 'animal',
     image: '/images/rakuda.png',
     aliases: ['らくだ', 'ラクダ', 'キャメル'],
-    explain: 'せなかに コブが あるよ。砂漠を あるくのが とくいだよ'
+    explain: 'せなかに コブが あるよ。さばくを あるくのが とくいだよ'
   },
   {
     id: 'deer',
@@ -224,7 +224,7 @@ export const questions: Question[] = [
     type: 'animal',
     image: '/images/sika.png',
     aliases: ['しか', 'シカ', '鹿', 'バンビ', '歯科', '四肢'], 
-    explain: 'かっこいい ツノが あるね。森に すんでいるよ',
+    explain: 'かっこいい ツノが あるね。もりに すんでいるよ',
     // 🚀 バンビへの反応を追加
     specialReactions: [
       { keywords: ['バンビ', 'ばんび'], message: 'せいかい！わぁ！えいがの キャラクターの なまえだね！' }
@@ -236,7 +236,7 @@ export const questions: Question[] = [
     type: 'animal',
     image: '/images/uma.png',
     aliases: ['うま', 'ウマ', '馬', 'ホース', 'ヒヒーン'],
-    explain: '走るのが とっても はやいよ。ヒヒーン！'
+    explain: 'はしるのが とっても はやいよ。ヒヒーン！'
   },
 
   // --- ❌ 動物じゃありませーん枠 ---
@@ -246,7 +246,7 @@ export const questions: Question[] = [
     type: 'not_animal',
     image: '/images/kinoko.png',
     aliases: ['きのこ', 'キノコ', '茸', 'マッシュルーム'],
-    explain: '森に 生えているけど どうぶつじゃないよ'
+    explain: 'もりに はえているけど どうぶつじゃないよ'
   },
   {
     id: 'robot',
@@ -254,7 +254,7 @@ export const questions: Question[] = [
     type: 'not_animal',
     image: '/images/robot.png',
     aliases: ['ろぼっと', 'ロボット', 'ロボ', 'マシーン'],
-    explain: '動くけど 機械だよ。ガシャンガシャン！'
+    explain: 'うごくけど きかいだよ。ガシャンガシャン！'
   },
   {
     id: 'plush',
@@ -262,7 +262,7 @@ export const questions: Question[] = [
     type: 'not_animal',
     image: '/images/nuigurumi.png',
     aliases: ['ぬいぐるみ', 'ヌイグルミ', '人形', 'ドール'],
-    explain: 'ふわふわ しているけど 生きていないよ'
+    explain: 'ふわふわ しているけど いきていないよ'
     },
   {
     id: 'seaweed',
@@ -270,7 +270,7 @@ export const questions: Question[] = [
     type: 'not_animal',
     image: '/images/wakame.png',
     aliases: ['わかめ', 'ワカメ', '海藻', 'かいそう'],
-    explain: '海の 中に あるけど 食べ物だよ'
+    explain: 'うみの なかに あるけど たべものだよ'
   },
   {
     id: 'car',
@@ -278,6 +278,6 @@ export const questions: Question[] = [
     type: 'not_animal',
     image: '/images/kuruma.png',
     aliases: ['くるま', 'クルマ', '車', '自動車', 'ブーブー'],
-    explain: 'タイヤが あって 人を 乗せて 走るよ'
+    explain: 'タイヤが あって ひとを のせて はしるよ'
   },
 ];

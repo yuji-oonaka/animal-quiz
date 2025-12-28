@@ -33,19 +33,25 @@ export const useSpeechRecognition = () => {
   }, []);
 
   const startListening = useCallback(() => {
-    if (!recognition) return;
-    try {
-      // 🚀 iOS対策：一度abortして確実にリセット
-      recognition.abort();
-      setText('');
-      // 少し間を置いてから開始するとiOSで安定します
-      setTimeout(() => {
-        recognition.start();
-      }, 100);
-    } catch (e: any) {
-      if (e.name !== 'InvalidStateError') console.error(e);
-    }
-  }, [recognition]);
+  if (!recognition) return;
+  try {
+    // 🚀 改善：もし既に動いていたら一旦止めるが、エラーは無視する
+    recognition.stop(); 
+    setText('');
+    
+    // 🚀 改善：iOSでも反応を速くするため待機時間を最小に（100ms -> 10ms）
+    setTimeout(() => {
+      recognition.start();
+    }, 10);
+  } catch (e: any) {
+    // すでに開始されている場合などのエラーをスルーして続行
+    if (e.name !== 'InvalidStateError') console.error(e);
+  }
+}, [recognition]);
+
+  const resetText = useCallback(() => {
+    setText(''); // 🚀 判定後にテキストをクリアするための関数
+  }, []);
 
   const stopListening = useCallback(() => {
     if (recognition) {
@@ -54,5 +60,5 @@ export const useSpeechRecognition = () => {
     }
   }, [recognition]);
 
-  return { text, isListening, startListening, stopListening };
+  return { text, isListening, startListening, stopListening, resetText }; // resetTextを追加
 };

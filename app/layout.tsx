@@ -1,8 +1,5 @@
 import type { Metadata, Viewport } from "next"; // 👈 Viewportを追加
-import { Inter } from "next/font/google";
 import "./globals.css";
-
-const inter = Inter({ subsets: ["latin"] });
 
 // 📱 1. ビューポート設定（スマホでの表示倍率や色など）
 export const viewport: Viewport = {
@@ -38,7 +35,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja">
-      <body className={inter.className}>{children}</body>
+      <body>{children}</body>
     </html>
   );
 }
