@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { questions, Question } from "./data/questions";
 import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
 import { QuizImage } from "./components/QuizImage";
@@ -38,11 +38,18 @@ export default function Home() {
     useSpeechRecognition();
   const currentQuestion = gameQuestions[currentIndex];
 
+  // 🚀 改善：画面の向きを確実に検知してパフォーマンス警告を消す
   useEffect(() => {
-    const loadVoices = () => {
-      window.speechSynthesis.getVoices();
-    };
+    const checkOrientation = () =>
+      setIsPortrait(window.innerHeight > window.innerWidth);
+    checkOrientation();
+    window.addEventListener("resize", checkOrientation);
+    return () => window.removeEventListener("resize", checkOrientation);
+  }, []);
 
+  // 🚀 改善：音声リストの準備を待つ
+  useEffect(() => {
+    const loadVoices = () => window.speechSynthesis.getVoices();
     loadVoices();
     if (
       typeof window !== "undefined" &&
@@ -52,31 +59,29 @@ export default function Home() {
     }
   }, []);
 
-  // 音声合成の共通関数
+  // 🚀 改善：Xiaomiでの揺れ対策とGoogle/Appleの速度バランス調整
   const speak = useCallback((message: string, onEnd?: () => void) => {
     window.speechSynthesis.cancel();
     const uttr = new SpeechSynthesisUtterance(message);
     uttr.lang = "ja-JP";
 
-    // その瞬間の最新の音声リストを取得
     const voices = window.speechSynthesis.getVoices();
-
     const bestVoice =
       voices.find(
         (v) => v.name.includes("Kyoko") || v.name.includes("Apple")
       ) ||
+      voices.find((v) => v.name.includes("ja-jp-x-gjs-network")) || // Android高品質
       voices.find((v) => v.lang.includes("ja") && v.name.includes("Google")) ||
       voices.find((v) => v.lang.includes("ja"));
 
     if (bestVoice) {
       uttr.voice = bestVoice;
-      // Googleは遅いので速く、それ以外（iPhone等）は標準
-      uttr.rate = bestVoice.name.includes("Google") ? 1.3 : 1.0;
-    } else {
-      uttr.rate = 1.1; // リストが空の場合の予備設定
+      const isGoogle =
+        bestVoice.name.includes("Google") || bestVoice.name.includes("network");
+      // Google系は少し速く(1.2)、揺れ防止のため高さは控えめ(1.2)
+      uttr.rate = isGoogle ? 1.2 : 1.0;
+      uttr.pitch = isGoogle ? 1.2 : 1.3;
     }
-
-    uttr.pitch = 1.3; // かわいさの高さ
 
     uttr.onend = () => {
       if (onEnd) onEnd();
@@ -117,13 +122,19 @@ export default function Home() {
     }, 400);
   }, [speak, startListening]);
 
-  const handleGameStart = () => {
-    // iOS対策：空の音を鳴らしてアンロック
-    const silentUttr = new SpeechSynthesisUtterance("");
-    window.speechSynthesis.speak(silentUttr);
+  // 🚀 改善：音のテスト機能を追加
+  const handleSoundTest = () => {
+    const silent = new SpeechSynthesisUtterance("");
+    window.speechSynthesis.speak(silent);
+    speak("こんにちわ！おとが きこえたら じゅんび オッケーだよ！");
+  };
 
-    // 💡 ここで一度強制的に声を再取得させる
-    window.speechSynthesis.getVoices();
+  const handleGameStart = () => {
+    // 🚀 改善：iPhone対策（音のアンロックとマイク許可ダイアログの早期化）
+    const silent = new SpeechSynthesisUtterance("");
+    window.speechSynthesis.speak(silent);
+    startListening();
+    setTimeout(() => stopListening(), 100);
 
     const shuffled = shuffleArray(questions);
     setGameQuestions(shuffled.slice(0, 10));
@@ -133,7 +144,6 @@ export default function Home() {
     setIsQuestionVisible(false);
     setGameState("playing");
 
-    // 最初の挨拶（speak関数内で最適な声が選ばれるようになる）
     speak("どうぶつクイズ！", () => {
       setShowStartText(true);
       speak("スタート！", () => {
@@ -180,15 +190,12 @@ export default function Home() {
     (userVoice: string) => {
       if (isJudged || !isQuestionVisible || !userVoice || showSeinoText) return;
 
-      // 通常の正解判定
       let isCorrect = currentQuestion.aliases.some((alias) =>
         userVoice.includes(alias)
       );
-
-      // 「どうぶつじゃない」時の判定
       if (currentQuestion.type === "not_animal") {
-        const notAnimalKeywords = ["じゃない", "ちがう", "ありませ", "違い"];
-        if (notAnimalKeywords.some((word) => userVoice.includes(word)))
+        const notKeywords = ["じゃない", "ちがう", "ありませ", "違い"];
+        if (notKeywords.some((word) => userVoice.includes(word)))
           isCorrect = true;
       }
 
@@ -197,39 +204,34 @@ export default function Home() {
         fireConfetti();
         const delayNext = () => setTimeout(handleNext, 1200);
 
-        // 🚀 隠し要素（ゴマちゃん、ダンボなど）のチェック
+        // 🚀 改善：隠し要素（ゴマちゃん、ダンボなど）への特別な反応
         const special = currentQuestion.specialReactions?.find((r) =>
           r.keywords.some((k) => userVoice.includes(k))
         );
 
         if (special) {
-          // 💡 「よく知ってるね！」などの特別な反応
           speak(special.message, delayNext);
         } else if (currentQuestion.type === "not_animal") {
-          // 🚀 ドラムロール風の「溜め」演出
+          // 🚀 改善：ドラムロール風の溜め演出
           speak("せいかい！", () => {
             setTimeout(() => {
               speak("これは... どうぶつじゃ... ありませーーーん！", delayNext);
-            }, 400); // 0.4秒だけ溜める
+            }, 400);
           });
         } else {
-          // 通常の正解
           speak(`せいかい！${currentQuestion.label}だね！`, delayNext);
         }
       } else {
-        // 判定ロジック：mistakeCountを更新
         const nextCount = mistakeCount + 1;
         setMistakeCount(nextCount);
 
         if (nextCount >= 2) {
-          // 2回間違えたら正解発表
           setIsJudged(true);
           speak(
             `むずかしいかな？ せいかいは、${currentQuestion.label} でした！`,
             () => setTimeout(handleNext, 1200)
           );
         } else {
-          // 1回目なら「もういちど」
           speak("あれ？ もういちど いってみてね", () => {
             if (isSeinoMode) performSeinoAction();
             else startListening();
@@ -251,25 +253,20 @@ export default function Home() {
     ]
   );
 
-  // 🚀 音声入力の監視（デバウンス）
   useEffect(() => {
     if (text && gameState === "playing") {
-      const timer = setTimeout(() => {
-        checkAnswer(text);
-      }, 800);
+      const timer = setTimeout(() => checkAnswer(text), 800);
       return () => clearTimeout(timer);
     }
-    // ⚠️ 修正：checkAnswerを依存関係から外すことで、mistakeCount更新による再発火を防ぐ
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text, gameState]);
 
   if (gameState === "title") {
     return (
       <main className="fixed inset-0 flex flex-col items-center justify-center overflow-hidden">
-        {/* 🖼️ 背景画像レイヤー */}
         <div className="absolute inset-0 -z-10">
+          {/* 🚀 改善：条件付きレンダリングでNext.jsの警告を解消 */}
           {isPortrait ? (
-            /* 📱 縦画面の時だけこれを出す */
             <Image
               src="/images/title-vertical.jpg"
               alt="背景 縦"
@@ -279,7 +276,6 @@ export default function Home() {
               sizes="100vw"
             />
           ) : (
-            /* 💻 横画面の時だけこれを出す */
             <Image
               src="/images/title-beside.png"
               alt="背景 横"
@@ -292,8 +288,15 @@ export default function Home() {
           <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px]" />
         </div>
 
-        <div className="relative z-10 flex flex-col items-center gap-8 p-6 w-full max-w-sm">
-          <div className="flex flex-col items-center gap-6 w-full bg-white/60 backdrop-blur-md p-8 rounded-[2.5rem] shadow-2xl border border-white/40">
+        <div className="relative z-10 flex flex-col items-center gap-6 p-6 w-full max-w-sm">
+          <div className="flex flex-col items-center gap-4 w-full bg-white/60 backdrop-blur-md p-6 rounded-[2.5rem] shadow-2xl border border-white/40">
+            <button
+              onClick={handleSoundTest}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-100 border border-orange-300 rounded-full text-orange-600 text-xs font-bold shadow-sm active:scale-95 transition-all"
+            >
+              <span>🔊 おとのテスト</span>
+            </button>
+
             <button
               onClick={() => setIsSeinoMode(!isSeinoMode)}
               className={`flex items-center gap-3 px-6 py-2 rounded-full border-2 transition-all shadow-sm ${
@@ -311,14 +314,17 @@ export default function Home() {
                 {isSeinoMode ? "せーの！モード ON" : "せーの！モード OFF"}
               </span>
             </button>
+
             <button
               onClick={handleGameStart}
               className="w-full bg-red-500 hover:bg-red-600 text-white text-4xl font-extrabold py-6 px-10 rounded-full shadow-[0_10px_0_rgb(185,28,28)] active:shadow-none active:translate-y-2 transition-all animate-bounce-slow"
             >
               スタート！
             </button>
-            <p className="text-[10px] text-gray-400 font-bold">
-              ※iPhoneはマナーモードを解除してね
+            <p className="text-[10px] text-gray-400 font-bold leading-tight text-center">
+              ※iPhoneは マナーモードを かいじょしてね
+              <br />
+              おとが きこえたら じゅんび オッケー！
             </p>
           </div>
         </div>
@@ -326,7 +332,6 @@ export default function Home() {
     );
   }
 
-  // 結果画面、プレイ画面のレンダリング（以下略 - 前回の構造を維持）
   if (gameState === "result") {
     return (
       <main className="fixed inset-0 bg-yellow-50 overflow-y-auto py-10 px-4">

@@ -157,7 +157,6 @@ export const questions: Question[] = [
     image: '/images/azarashi.png',
     aliases: ['あざらし', 'アザラシ', 'ゴマちゃん', 'ごまちゃん', 'ゴマアザラシ'],
     explain: 'こおりの うえで おひるね するのが だいすきだよ',
-    // 🚀 ゴマちゃんへの反応を追加
     specialReactions: [
       { keywords: ['ゴマちゃん', 'ごまちゃん'], message: 'せいかい！わぁ！よくしってるね、アニメのキャラクターで いるね！' }
     ]
