@@ -39,13 +39,17 @@ export default function Home() {
   const currentQuestion = gameQuestions[currentIndex];
 
   useEffect(() => {
-    const checkOrientation = () => {
-      setIsPortrait(window.innerHeight > window.innerWidth);
+    const loadVoices = () => {
+      window.speechSynthesis.getVoices();
     };
 
-    checkOrientation(); // 初回チェック
-    window.addEventListener("resize", checkOrientation);
-    return () => window.removeEventListener("resize", checkOrientation);
+    loadVoices();
+    if (
+      typeof window !== "undefined" &&
+      window.speechSynthesis.onvoiceschanged !== undefined
+    ) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
   }, []);
 
   // 音声合成の共通関数
@@ -53,13 +57,27 @@ export default function Home() {
     window.speechSynthesis.cancel();
     const uttr = new SpeechSynthesisUtterance(message);
     uttr.lang = "ja-JP";
+
+    // その瞬間の最新の音声リストを取得
     const voices = window.speechSynthesis.getVoices();
+
     const bestVoice =
+      voices.find(
+        (v) => v.name.includes("Kyoko") || v.name.includes("Apple")
+      ) ||
       voices.find((v) => v.lang.includes("ja") && v.name.includes("Google")) ||
       voices.find((v) => v.lang.includes("ja"));
-    if (bestVoice) uttr.voice = bestVoice;
-    uttr.rate = 1.3;
-    uttr.pitch = 1.3;
+
+    if (bestVoice) {
+      uttr.voice = bestVoice;
+      // Googleは遅いので速く、それ以外（iPhone等）は標準
+      uttr.rate = bestVoice.name.includes("Google") ? 1.3 : 1.0;
+    } else {
+      uttr.rate = 1.1; // リストが空の場合の予備設定
+    }
+
+    uttr.pitch = 1.3; // かわいさの高さ
+
     uttr.onend = () => {
       if (onEnd) onEnd();
     };
@@ -100,9 +118,12 @@ export default function Home() {
   }, [speak, startListening]);
 
   const handleGameStart = () => {
-    // 🚀 iOS対策: ユーザー操作（クリック）の直後に空の音を鳴らしてSpeechシステムをアンロック
+    // iOS対策：空の音を鳴らしてアンロック
     const silentUttr = new SpeechSynthesisUtterance("");
     window.speechSynthesis.speak(silentUttr);
+
+    // 💡 ここで一度強制的に声を再取得させる
+    window.speechSynthesis.getVoices();
 
     const shuffled = shuffleArray(questions);
     setGameQuestions(shuffled.slice(0, 10));
@@ -112,6 +133,7 @@ export default function Home() {
     setIsQuestionVisible(false);
     setGameState("playing");
 
+    // 最初の挨拶（speak関数内で最適な声が選ばれるようになる）
     speak("どうぶつクイズ！", () => {
       setShowStartText(true);
       speak("スタート！", () => {
