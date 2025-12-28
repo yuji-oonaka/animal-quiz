@@ -38,7 +38,7 @@ export default function Home() {
     useSpeechRecognition();
   const currentQuestion = gameQuestions[currentIndex];
 
-  // 🚀 改善：画面の向きを確実に検知してパフォーマンス警告を消す
+  // 1. 画面の向きを検知（画像警告対策）
   useEffect(() => {
     const checkOrientation = () =>
       setIsPortrait(window.innerHeight > window.innerWidth);
@@ -47,7 +47,7 @@ export default function Home() {
     return () => window.removeEventListener("resize", checkOrientation);
   }, []);
 
-  // 🚀 改善：音声リストの準備を待つ
+  // 2. 音声リストの準備を待つ
   useEffect(() => {
     const loadVoices = () => window.speechSynthesis.getVoices();
     loadVoices();
@@ -59,7 +59,7 @@ export default function Home() {
     }
   }, []);
 
-  // 🚀 改善：Xiaomiでの揺れ対策とGoogle/Appleの速度バランス調整
+  // 3. 【重要】全機種対応・かわいい声のspeak関数
   const speak = useCallback((message: string, onEnd?: () => void) => {
     window.speechSynthesis.cancel();
     const uttr = new SpeechSynthesisUtterance(message);
@@ -78,13 +78,15 @@ export default function Home() {
       uttr.voice = bestVoice;
       const isGoogle =
         bestVoice.name.includes("Google") || bestVoice.name.includes("network");
-      // Google系は少し速く(1.2)、揺れ防止のため高さは控えめ(1.2)
-      uttr.rate = isGoogle ? 1.2 : 1.0;
+      // Google(Android/PC)は遅いので1.2、Apple(iPhone)は速いので1.0
+      uttr.rate = isGoogle ? 1.25 : 1.0;
+      // Androidの揺れを防ぐため高さは1.2に調整
       uttr.pitch = isGoogle ? 1.2 : 1.3;
     }
 
     uttr.onend = () => {
-      if (onEnd) onEnd();
+      // 🚀 話し終わった直後にマイクを起動すると競合するので、少し待ってから実行
+      if (onEnd) setTimeout(onEnd, 300);
     };
     window.speechSynthesis.speak(uttr);
   }, []);
@@ -122,7 +124,6 @@ export default function Home() {
     }, 400);
   }, [speak, startListening]);
 
-  // 🚀 改善：音のテスト機能を追加
   const handleSoundTest = () => {
     const silent = new SpeechSynthesisUtterance("");
     window.speechSynthesis.speak(silent);
@@ -130,11 +131,11 @@ export default function Home() {
   };
 
   const handleGameStart = () => {
-    // 🚀 改善：iPhone対策（音のアンロックとマイク許可ダイアログの早期化）
+    // 🚀 iPhone対策：最初のクリックでマイクと音声を強制アンロック
     const silent = new SpeechSynthesisUtterance("");
     window.speechSynthesis.speak(silent);
     startListening();
-    setTimeout(() => stopListening(), 100);
+    setTimeout(() => stopListening(), 150);
 
     const shuffled = shuffleArray(questions);
     setGameQuestions(shuffled.slice(0, 10));
@@ -204,7 +205,6 @@ export default function Home() {
         fireConfetti();
         const delayNext = () => setTimeout(handleNext, 1200);
 
-        // 🚀 改善：隠し要素（ゴマちゃん、ダンボなど）への特別な反応
         const special = currentQuestion.specialReactions?.find((r) =>
           r.keywords.some((k) => userVoice.includes(k))
         );
@@ -212,20 +212,18 @@ export default function Home() {
         if (special) {
           speak(special.message, delayNext);
         } else if (currentQuestion.type === "not_animal") {
-          // 🚀 改善：ドラムロール風の溜め演出
           speak("せいかい！", () => {
-            setTimeout(() => {
-              speak("これは... どうぶつじゃ... ありませーーーん！", delayNext);
-            }, 400);
+            speak("これは... どうぶつじゃ... ありませーーーん！", delayNext);
           });
         } else {
           speak(`せいかい！${currentQuestion.label}だね！`, delayNext);
         }
       } else {
-        const nextCount = mistakeCount + 1;
-        setMistakeCount(nextCount);
+        // 🚀 判定：1回目はリトライ、2回目で答え発表
+        const currentMistakeCount = mistakeCount + 1;
+        setMistakeCount(currentMistakeCount);
 
-        if (nextCount >= 2) {
+        if (currentMistakeCount >= 2) {
           setIsJudged(true);
           speak(
             `むずかしいかな？ せいかいは、${currentQuestion.label} でした！`,
@@ -265,7 +263,6 @@ export default function Home() {
     return (
       <main className="fixed inset-0 flex flex-col items-center justify-center overflow-hidden">
         <div className="absolute inset-0 -z-10">
-          {/* 🚀 改善：条件付きレンダリングでNext.jsの警告を解消 */}
           {isPortrait ? (
             <Image
               src="/images/title-vertical.jpg"
@@ -287,16 +284,14 @@ export default function Home() {
           )}
           <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px]" />
         </div>
-
         <div className="relative z-10 flex flex-col items-center gap-6 p-6 w-full max-w-sm">
           <div className="flex flex-col items-center gap-4 w-full bg-white/60 backdrop-blur-md p-6 rounded-[2.5rem] shadow-2xl border border-white/40">
             <button
               onClick={handleSoundTest}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-100 border border-orange-300 rounded-full text-orange-600 text-xs font-bold shadow-sm active:scale-95 transition-all"
+              className="px-4 py-2 bg-orange-100 border border-orange-300 rounded-full text-orange-600 text-xs font-bold shadow-sm active:scale-95 transition-all"
             >
-              <span>🔊 おとのテスト</span>
+              🔊 おとのテスト
             </button>
-
             <button
               onClick={() => setIsSeinoMode(!isSeinoMode)}
               className={`flex items-center gap-3 px-6 py-2 rounded-full border-2 transition-all shadow-sm ${
@@ -314,7 +309,6 @@ export default function Home() {
                 {isSeinoMode ? "せーの！モード ON" : "せーの！モード OFF"}
               </span>
             </button>
-
             <button
               onClick={handleGameStart}
               className="w-full bg-red-500 hover:bg-red-600 text-white text-4xl font-extrabold py-6 px-10 rounded-full shadow-[0_10px_0_rgb(185,28,28)] active:shadow-none active:translate-y-2 transition-all animate-bounce-slow"
@@ -332,6 +326,7 @@ export default function Home() {
     );
   }
 
+  // 結果画面とプレイ画面は共通の構造を維持
   if (gameState === "result") {
     return (
       <main className="fixed inset-0 bg-yellow-50 overflow-y-auto py-10 px-4">
