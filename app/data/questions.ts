@@ -41,17 +41,14 @@ export const questions: Question[] = [
     aliases: ['うさぎ', 'ウサギ', '兎', 'ラビット', 'ピョン'],
     explain: 'みみが ながくて ぴょんぴょん はねるよ'
   },
+  // ゾウを削除し、認識率抜群のカンガルーを投入
   {
-    id: 'elephant',
-    label: 'ぞう',
+    id: 'kangaroo',
+    label: 'かんがるー',
     type: 'animal',
-    image: '/images/zou.png',
-    aliases: ['ぞうさん', 'ゾウサン', 'ぞう', 'ゾウ', '象', 'ぞー', 'ゾー', 'ぞお', 'そう', 'どー','じゃあ', 'エレファント', 'ダンボ'],
-    explain: 'おはなが とっても ながい どうぶつだよ',
-    // 🚀 ダンボへの反応を追加
-    specialReactions: [
-      { keywords: ['ダンボ', 'だんぼ'], message: 'せいかい！わぁ！ディズニーのキャラクターの なまえだね！' }
-    ]
+    image: '/images/kangaroo.png', // カンガルーの画像を用意
+    aliases: ['かんがるー', 'カンガルー', 'ぴょんぴょん', 'ぽけっと'],
+    explain: 'おなかの ポケットに あかちゃんが いるよ！ ぴょんぴょん はねるのが とくいなんだ'
   },
   {
     id: 'giraffe',
@@ -75,7 +72,7 @@ export const questions: Question[] = [
     type: 'animal',
     image: '/images/tora.png',
     // 🆕 「寅さん」「トラさん」などを追加
-    aliases: ['とら', 'トラ', '虎', 'とらさん', 'トラさん', '寅さん'], 
+    aliases: ['とら', 'トラ', '虎', 'とらさん','たら', '寅さん'], 
     explain: 'しましま もようが かっこいい！ ガオーって なくよ'
   },
   {

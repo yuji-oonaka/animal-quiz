@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { QuizImage } from "./QuizImage";
 import { Question } from "../data/questions";
 
@@ -10,6 +11,7 @@ interface GameScreenProps {
   isJudged: boolean;
   isQuestionVisible: boolean;
   showSeinoText: boolean;
+  voiceText: string;
   onBackToTitle: () => void;
   onStartListening: () => void;
 }
@@ -21,52 +23,83 @@ export const GameScreen = ({
   isJudged,
   isQuestionVisible,
   showSeinoText,
+  voiceText,
   onBackToTitle,
   onStartListening,
 }: GameScreenProps) => {
+  const [showSuccessVisual, setShowSuccessVisual] = useState(false);
+
+  useEffect(() => {
+    if (voiceText.length > 0 && !isJudged) {
+      setShowSuccessVisual(true);
+    } else {
+      setShowSuccessVisual(false);
+    }
+  }, [voiceText, isJudged]);
+
   return (
-    <main className="fixed inset-0 bg-orange-50 flex flex-col landscape:flex-row overflow-hidden">
-      {/* VoiceIndicator を削除しました */}
-
-      <button
-        onClick={onBackToTitle}
-        className="absolute top-4 left-4 z-40 bg-white/90 p-2 px-4 rounded-full shadow text-gray-500 font-bold text-sm active:bg-gray-100 transition-colors"
-      >
-        🏠 やめる
-      </button>
-
-      <div className="flex-1 relative landscape:w-2/3 landscape:h-full flex items-center justify-center">
-        {isQuestionVisible ? (
-          <QuizImage src={question.image} alt={question.label} />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-orange-100/30">
-            <span className="text-9xl text-orange-200 animate-pulse">？</span>
-          </div>
-        )}
-        <div className="absolute top-4 right-4 bg-white/80 px-4 py-2 rounded-full font-bold text-orange-600 shadow-md z-10">
+    <main className="fixed inset-0 bg-white flex flex-col landscape:flex-row overflow-hidden">
+      {/* 1. ヘッダー：背景を消して画像の上に浮かせる */}
+      <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start z-40 pointer-events-none">
+        <button
+          onClick={onBackToTitle}
+          className="pointer-events-auto bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full shadow-sm text-gray-500 font-bold text-xs active:scale-95 transition-transform border border-gray-100"
+        >
+          🏠 やめる
+        </button>
+        <div className="bg-orange-500/90 backdrop-blur-sm px-4 py-2 rounded-full font-bold text-white shadow-sm text-xs">
           {currentIndex + 1} / 10
         </div>
       </div>
 
-      <div className="h-32 bg-white/50 backdrop-blur-sm flex flex-col items-center justify-center z-20 landscape:h-full landscape:w-1/3 border-t landscape:border-t-0 landscape:border-l border-orange-200">
-        <button
-          onClick={() => {
-            if (!isListening && !isJudged) onStartListening();
-          }}
-          className={`w-20 h-20 rounded-full flex items-center justify-center text-4xl shadow-lg transition-all active:scale-90 ${
-            isListening
-              ? "bg-red-500 animate-pulse text-white"
-              : "bg-orange-400 text-white"
+      {/* 2. 画像エリア：余白をなくして最大化 */}
+      <div className="flex-1 relative w-full h-full flex items-center justify-center">
+        {isQuestionVisible ? (
+          <QuizImage src={question.image} alt={question.label} />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-orange-50/30">
+            <span className="text-9xl text-orange-100 animate-pulse">？</span>
+          </div>
+        )}
+      </div>
+
+      {/* 3. 操作エリア：スリム化して画像の下に配置 */}
+      <div className="h-36 landscape:h-full landscape:w-1/4 bg-white/40 backdrop-blur-sm flex flex-col items-center justify-center z-20 border-t border-gray-100 px-6 pb-safe">
+        <div className="relative mb-2">
+          {showSuccessVisual && (
+            <div className="absolute inset-0 bg-green-400 rounded-full animate-ping opacity-30" />
+          )}
+
+          <button
+            onClick={() => {
+              if (!isListening && !isJudged) onStartListening();
+            }}
+            className={`relative w-20 h-20 rounded-full flex items-center justify-center text-4xl shadow-md transition-all duration-300 active:scale-90 ${
+              showSuccessVisual
+                ? "bg-green-500 scale-105"
+                : isListening
+                ? "bg-red-500 animate-pulse text-white"
+                : "bg-orange-400 text-white"
+            }`}
+          >
+            {showSuccessVisual ? "✨" : isListening ? "👂" : "🎙️"}
+          </button>
+        </div>
+
+        <p
+          className={`text-center font-bold transition-all duration-200 ${
+            showSuccessVisual ? "text-green-600 scale-105" : "text-gray-600"
           }`}
         >
-          {isListening ? "👂" : "🎙️"}
-        </button>
-        <p className="mt-3 text-sm font-bold text-gray-600">
-          {isListening
-            ? "きいてるよ！"
-            : showSeinoText
-            ? "せーの！"
-            : "ボタンを おしてね"}
+          <span className="text-lg">
+            {showSuccessVisual
+              ? "きこえたよ！"
+              : showSeinoText
+              ? "せーの！"
+              : isListening
+              ? "おなまえは？"
+              : "ボタンを おしてね"}
+          </span>
         </p>
       </div>
     </main>
