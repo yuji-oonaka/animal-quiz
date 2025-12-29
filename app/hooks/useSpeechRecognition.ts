@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface IWindow extends Window {
   webkitSpeechRecognition: any;
@@ -8,9 +10,11 @@ interface IWindow extends Window {
 export const useSpeechRecognition = () => {
   const [text, setText] = useState<string>('');
   const [isListening, setIsListening] = useState<boolean>(false);
-  const [recognition, setRecognition] = useState<any>(null);
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
     const { webkitSpeechRecognition, SpeechRecognition } = window as unknown as IWindow;
     const SpeechRecognitionApi = SpeechRecognition || webkitSpeechRecognition;
 
@@ -19,46 +23,52 @@ export const useSpeechRecognition = () => {
     const instance = new SpeechRecognitionApi();
     instance.continuous = false;
     instance.lang = 'ja-JP';
-    instance.interimResults = false;
+    instance.interimResults = false; // 安定のため false に戻す
 
     instance.onstart = () => setIsListening(true);
     instance.onresult = (event: any) => {
-      setText(event.results[0][0].transcript);
-      setIsListening(false);
+      // 確定した結果のみを取得
+      const transcript = event.results[0][0].transcript;
+      setText(transcript);
     };
     instance.onend = () => setIsListening(false);
-    instance.onerror = () => setIsListening(false);
+    instance.onerror = (event: any) => {
+      setIsListening(false);
+    };
 
-    setRecognition(instance);
+    recognitionRef.current = instance;
+
+    return () => {
+      if (recognitionRef.current) recognitionRef.current.abort();
+    };
   }, []);
 
   const startListening = useCallback(() => {
-  if (!recognition) return;
-  try {
-    // 🚀 改善：もし既に動いていたら一旦止めるが、エラーは無視する
-    recognition.stop(); 
-    setText('');
-    
-    // 🚀 改善：iOSでも反応を速くするため待機時間を最小に（100ms -> 10ms）
-    setTimeout(() => {
-      recognition.start();
-    }, 10);
-  } catch (e: any) {
-    // すでに開始されている場合などのエラーをスルーして続行
-    if (e.name !== 'InvalidStateError') console.error(e);
-  }
-}, [recognition]);
+    if (!recognitionRef.current) return;
+    try {
+      recognitionRef.current.stop();
+    } catch (e) {}
 
-  const resetText = useCallback(() => {
-    setText(''); // 🚀 判定後にテキストをクリアするための関数
+    setText('');
+    setTimeout(() => {
+      try {
+        recognitionRef.current.start();
+      } catch (e) {
+        console.warn("Speech recognition start failed:", e);
+      }
+    }, 10);
   }, []);
 
   const stopListening = useCallback(() => {
-    if (recognition) {
-      recognition.abort();
+    if (recognitionRef.current) {
+      recognitionRef.current.abort();
       setIsListening(false);
     }
-  }, [recognition]);
+  }, []);
 
-  return { text, isListening, startListening, stopListening, resetText }; // resetTextを追加
+  const resetText = useCallback(() => {
+    setText('');
+  }, []);
+
+  return { text, isListening, startListening, stopListening, resetText };
 };

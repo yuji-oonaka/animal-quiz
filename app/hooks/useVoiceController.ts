@@ -1,28 +1,42 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 
 export const useVoiceController = () => {
-  // 1. 音声リストの準備を待つ (初期化) 
+  // 発話インスタンスを保持し、不必要なGC（ガベージコレクション）を防ぐ
+  const uttrRef = useRef<SpeechSynthesisUtterance | null>(null);
+
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
     const loadVoices = () => window.speechSynthesis.getVoices();
     loadVoices();
-    if (
-      typeof window !== "undefined" &&
-      window.speechSynthesis.onvoiceschanged !== undefined
-    ) {
+    
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
       window.speechSynthesis.onvoiceschanged = loadVoices;
     }
+
+    // アンマウント時に音声を強制停止
+    return () => window.speechSynthesis.cancel();
   }, []);
 
-  // 2. 全機種対応・かわいい声のspeak関数 [cite: 14, 15]
   const speak = useCallback((message: string, onEnd?: () => void) => {
+    if (typeof window === "undefined") return;
+
+    // 進行中の音声をキャンセル [cite: 8]
     window.speechSynthesis.cancel();
+
+    // 空文字の場合は何もしない（iOSなどの無音再生ハック用を除く）
+    if (!message) {
+      if (onEnd) onEnd();
+      return;
+    }
+
     const uttr = new SpeechSynthesisUtterance(message);
     uttr.lang = "ja-JP";
 
     const voices = window.speechSynthesis.getVoices();
-    // 優先度の高い声を探す [cite: 14]
+    // 優先度の高い声の選定ロジックを維持 [cite: 8]
     const bestVoice =
       voices.find((v) => v.name.includes("Kyoko") || v.name.includes("Apple")) ||
       voices.find((v) => v.name.includes("ja-jp-x-gjs-network")) || 
@@ -31,22 +45,29 @@ export const useVoiceController = () => {
 
     if (bestVoice) {
       uttr.voice = bestVoice;
-      const isGoogle =
-        bestVoice.name.includes("Google") || bestVoice.name.includes("network");
-      // OS/エンジンごとの速度・高さ調整 
-      uttr.rate = isGoogle ? 1.25 : 1.0;
-      uttr.pitch = isGoogle ? 1.2 : 1.3;
+      const isGoogle = bestVoice.name.includes("Google") || bestVoice.name.includes("network");
+      uttr.rate = isGoogle ? 1.25 : 1.0; 
+      uttr.pitch = isGoogle ? 1.2 : 1.3; 
     }
 
     uttr.onend = () => {
-      // 発話終了後の競合回避タイマー 
-      if (onEnd) setTimeout(onEnd, 50);
+      // 発話終了後、ハードウェアの解放を待つためにわずかな遅延を入れる 
+      if (onEnd) setTimeout(onEnd, 100);
     };
+
+    uttr.onerror = (e) => {
+      console.error("SpeechSynthesis Error:", e);
+      if (onEnd) onEnd();
+    };
+
+    uttrRef.current = uttr;
     window.speechSynthesis.speak(uttr);
   }, []);
 
   const cancelSpeech = useCallback(() => {
-    window.speechSynthesis.cancel();
+    if (typeof window !== "undefined") {
+      window.speechSynthesis.cancel();
+    }
   }, []);
 
   return { speak, cancelSpeech };

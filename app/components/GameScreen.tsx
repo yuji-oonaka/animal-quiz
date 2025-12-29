@@ -1,7 +1,6 @@
 "use client";
 
 import { QuizImage } from "./QuizImage";
-import { VoiceIndicator } from "./GameOverlays";
 import { Question } from "../data/questions";
 
 interface GameScreenProps {
@@ -11,7 +10,6 @@ interface GameScreenProps {
   isJudged: boolean;
   isQuestionVisible: boolean;
   showSeinoText: boolean;
-  voiceText: string;
   onBackToTitle: () => void;
   onStartListening: () => void;
 }
@@ -23,13 +21,12 @@ export const GameScreen = ({
   isJudged,
   isQuestionVisible,
   showSeinoText,
-  voiceText,
   onBackToTitle,
   onStartListening,
 }: GameScreenProps) => {
   return (
     <main className="fixed inset-0 bg-orange-50 flex flex-col landscape:flex-row overflow-hidden">
-      <VoiceIndicator text={voiceText} />
+      {/* VoiceIndicator を削除しました */}
 
       <button
         onClick={onBackToTitle}
