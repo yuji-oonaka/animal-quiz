@@ -52,13 +52,16 @@ export const GameScreen = ({
         </div>
       </div>
 
-      {/* 2. 画像エリア：余白をなくして最大化 */}
+      {/* 2. 画像エリア：切り替え時の「？」をより軽やかに */}
       <div className="flex-1 relative w-full h-full flex items-center justify-center">
         {isQuestionVisible ? (
           <QuizImage src={question.image} alt={question.label} />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-orange-50/30">
-            <span className="text-9xl text-orange-100 animate-pulse">？</span>
+            {/* 🚀 animate-pulse よりも速い動き、または静止させて「待ち」を感じさせない */}
+            <span className="text-9xl text-orange-200 animate-bounce-in opacity-50">
+              ？
+            </span>
           </div>
         )}
       </div>

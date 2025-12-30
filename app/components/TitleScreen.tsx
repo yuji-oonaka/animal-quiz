@@ -6,6 +6,7 @@ import Image from "next/image";
 interface TitleScreenProps {
   isPortrait: boolean;
   isSeinoMode: boolean;
+  isIOS: boolean; // 🚀 新規追加：デバイス判定
   onSoundTest: () => void;
   onToggleSeino: () => void;
   onStart: () => void;
@@ -14,22 +15,25 @@ interface TitleScreenProps {
 export const TitleScreen = ({
   isPortrait,
   isSeinoMode,
+  isIOS,
   onSoundTest,
   onToggleSeino,
   onStart,
 }: TitleScreenProps) => {
-  // 🚀 ロジック：表示制御用のステート
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // 🚀 0.6秒待ってからUIを表示（この間にQ1/Q2の画像をロード）
-    const timer = setTimeout(() => setIsVisible(true), 600);
+    // 🚀 テンポ向上：0.6秒から大幅短縮。
+    // Androidなら爆速、iOSでも読み込みを待ちすぎない時間に。
+    const displayDelay = isIOS ? 350 : 200;
+
+    const timer = setTimeout(() => setIsVisible(true), displayDelay);
     return () => clearTimeout(timer);
-  }, []);
+  }, [isIOS]);
 
   return (
     <main className="fixed inset-0 flex flex-col items-center justify-center overflow-hidden">
-      {/* 背景画像エリア（ここは即座に表示） */}
+      {/* 背景画像エリア */}
       <div className="absolute inset-0 -z-10">
         <Image
           src={
@@ -46,10 +50,10 @@ export const TitleScreen = ({
         <div className="absolute inset-0 bg-white/10 backdrop-blur-[1px]" />
       </div>
 
-      {/* 操作エリア：isVisible が true になったらふわっと浮かび上がる */}
+      {/* 🚀 duration-700 から 500 に短縮し、移動距離(translate-y)も抑えて「速さ」を演出 */}
       <div
-        className={`relative z-10 flex flex-col items-center gap-6 p-6 w-full max-w-sm transition-all duration-700 ease-out ${
-          isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+        className={`relative z-10 flex flex-col items-center gap-6 p-6 w-full max-w-sm transition-all duration-500 ease-out ${
+          isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
         }`}
       >
         <div className="flex flex-col items-center gap-4 w-full bg-white/60 backdrop-blur-md p-6 rounded-[2.5rem] shadow-2xl border border-white/40">

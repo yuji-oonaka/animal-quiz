@@ -15,25 +15,29 @@ export const ResultScreen = ({
   onBackToTitle,
   onExplain,
 }: ResultScreenProps) => {
-  const [selectedInResult, setSelectedInResult] = useState<Question | null>(null);
+  const [selectedInResult, setSelectedInResult] = useState<Question | null>(
+    null
+  );
 
   return (
     <main className="fixed inset-0 bg-yellow-50 overflow-y-auto py-10 px-4 scroll-smooth">
       <div className="max-w-4xl mx-auto text-center">
-        <h2 className="text-3xl font-bold text-orange-600 mb-6 animate-bounce-in">
+        {/* 🚀 速度重視：bounce-in より速い pop-in に変更 */}
+        <h2 className="text-3xl font-bold text-orange-600 mb-6 animate-pop-in">
           クリア おめでとう！
         </h2>
-        
-        {/* グリッドレイアウトの最適化：画像サイズを適切に指定し、ブラウザの負荷を軽減 */}
+
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-10">
-          {questions.map((q) => (
+          {questions.map((q, index) => (
             <button
               key={q.id}
               onClick={() => {
-                setSelectedInResult(q); 
-                onExplain(q.explain); 
+                setSelectedInResult(q);
+                onExplain(q.explain);
               }}
-              className="group bg-white p-2 rounded-2xl shadow-sm hover:shadow-md active:scale-95 transition-all duration-200 border-2 border-transparent hover:border-orange-200"
+              // 🚀 テンポの工夫：indexを使って0.05秒ずつ表示をずらす（スタッガード演出）
+              style={{ animationDelay: `${index * 50}ms` }}
+              className="group bg-white p-2 rounded-2xl shadow-sm hover:shadow-md active:scale-95 transition-all duration-200 border-2 border-transparent hover:border-orange-200 animate-pop-in fill-mode-both"
             >
               <div className="aspect-square relative mb-2 overflow-hidden rounded-xl bg-orange-50/50">
                 <Image
@@ -59,8 +63,8 @@ export const ResultScreen = ({
         </button>
       </div>
 
-      {/* 詳細モーダル：表示時のアニメーションと背景のぼかしを強化 */}
-      {selectedInResult && ( 
+      {/* 詳細モーダル：背景のボカシも一瞬で表示 */}
+      {selectedInResult && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
           onClick={() => setSelectedInResult(null)}

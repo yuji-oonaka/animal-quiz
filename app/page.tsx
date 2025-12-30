@@ -66,51 +66,58 @@ export default function Home() {
       if (engine.isJudged || !voiceText || engine.gameState !== "playing")
         return;
 
+      // 1. 判定を即座に行う
       const result = engine.processAnswer(voiceText);
       resetText();
 
       if (result.type === "ignore") return;
 
-      const delayNext = () => {
+      // 🚀 次の問題への遷移を「最短」にする関数
+      const triggerNext = () => {
+        // 通信の仕込み：次の次の画像を今のうちにロード
         const nextNextIndex = engine.currentIndex + 2;
         if (engine.gameQuestions[nextNextIndex]) {
           preloadOne(engine.gameQuestions[nextNextIndex].image);
         }
 
+        // テンポ調整：Androidは爆速、iOSはマイク解放のために少しだけ「ため」を作る
+        const transitionWait = isIOS ? 350 : 200;
+
         setTimeout(() => {
           const hasNext = engine.nextQuestion();
           if (hasNext) {
+            // 画面切り替えを「100ms」から「10ms」へ短縮
             setTimeout(() => {
               engine.setIsQuestionVisible(true);
               if (engine.isSeinoMode) performSeinoAction();
               else startListening();
-            }, 100);
+            }, 10);
           } else {
             voice.speak("ぜんぶ おしまい！ よくがんばったね！");
           }
-        }, 800);
+        }, transitionWait);
       };
 
       if (result.type === "correct") {
+        // 🚀 視覚演出（紙吹雪）を読み上げより先に実行し、即応性を出す
         effects.fireQuizConfetti();
-        if (result.special) voice.speak(result.special.message, delayNext);
-        else if (engine.currentQuestion?.type === "not_animal") {
-          voice.speak(
-            "せいかい！ これは... どうぶつじゃ... ありませーーーん！",
-            delayNext
-          );
-        } else {
-          voice.speak(
-            `せいかい！ ${engine.currentQuestion?.label}だね！`,
-            delayNext
-          );
-        }
+
+        const msg = result.special
+          ? result.special.message
+          : engine.currentQuestion?.type === "not_animal"
+          ? "せいかい！ これは... どうぶつじゃ... ありませーーーん！"
+          : `せいかい！ ${engine.currentQuestion?.label}だね！`;
+
+        // 読み上げ終了と同時に triggerNext を実行
+        voice.speak(msg, triggerNext);
       } else if (result.type === "giveup") {
+        // 「わからない」時もテンポを崩さない
         voice.speak(
           `むずかしいかな？ せいかいは、${engine.currentQuestion?.label} でした！`,
-          delayNext
+          triggerNext
         );
       } else if (result.type === "retry") {
+        // リトライは次の問題に行かないので、そのままマイク再開
         voice.speak("あれ？ もういちど いってみてね", () => {
           if (engine.isSeinoMode) performSeinoAction();
           else startListening();
@@ -125,6 +132,7 @@ export default function Home() {
       effects,
       performSeinoAction,
       preloadOne,
+      isIOS, // Dependencyに追加
     ]
   );
 
@@ -144,36 +152,43 @@ export default function Home() {
   }, [text, engine.gameState, engine.isJudged, handleAnswerCheck, isIOS]);
 
   const handleGameStart = () => {
+    // 1. 前の状態を即座にクリーンアップ
     voice.cancelSpeech();
     stopListening();
     resetText();
 
-    // 🚀 【iOS最適化】プリロードを並列ではなく直列にする（マイクへの干渉防止）
-    setTimeout(() => {
-      if (engine.gameQuestions[2]) preloadOne(engine.gameQuestions[2].image);
-      if (isIOS) {
-        setTimeout(() => {
-          if (engine.gameQuestions[3])
-            preloadOne(engine.gameQuestions[3].image);
-        }, 1000);
-      } else {
-        if (engine.gameQuestions[3]) preloadOne(engine.gameQuestions[3].image);
-        if (engine.gameQuestions[4]) preloadOne(engine.gameQuestions[4].image);
-      }
-    }, 1000);
-
+    // 2. 即座にゲーム状態を切り替えてUIを「進行中」にする
     engine.startGame();
-    engine.setIsJudged(true);
+    engine.setIsJudged(true); // 演出中は誤入力を防ぐ
+
+    // 🚀 戦略：最初の読み上げ（約1〜1.5秒）を「ロード時間」として活用する
     voice.speak("どうぶつクイズ！", () => {
+      // 最初の読み上げが終わるタイミングで「スタート！」の表示へ
       setShowStartText(true);
+
       voice.speak("スタート！", () => {
+        // 「スタート！」と言い終わったら即座に問題を表示
         setShowStartText(false);
         engine.setIsQuestionVisible(true);
         engine.setIsJudged(false);
+
+        // マイク起動
         if (engine.isSeinoMode) performSeinoAction();
         else startListening();
       });
     });
+
+    // 🚀 読み上げの裏で「時間差」で画像をロード（通信の衝突を避ける）
+    // 2問目はTitleScreenでのプリロードで完了している想定
+    const loadDelay = isIOS ? 800 : 400;
+
+    setTimeout(() => {
+      if (engine.gameQuestions[2]) preloadOne(engine.gameQuestions[2].image);
+
+      setTimeout(() => {
+        if (engine.gameQuestions[3]) preloadOne(engine.gameQuestions[3].image);
+      }, loadDelay);
+    }, 200); // 最初の発話開始直後に1問目のロードを開始
   };
 
   const handleBackToTitle = () => {
@@ -195,6 +210,7 @@ export default function Home() {
         <TitleScreen
           isPortrait={isPortrait}
           isSeinoMode={engine.isSeinoMode}
+          isIOS={isIOS} // 🚀 ここに isIOS を追加して渡します！
           onSoundTest={() => {
             voice.speak(
               "こんにちわ！おとが きこえたら じゅんび オッケーだよ！"
@@ -202,7 +218,6 @@ export default function Home() {
           }}
           onToggleSeino={() => engine.setIsSeinoMode(!engine.isSeinoMode)}
           onStart={() => {
-            // 🚀 startListening は hooks 側で isIOS 対応済み
             startListening();
             setTimeout(() => {
               try {
