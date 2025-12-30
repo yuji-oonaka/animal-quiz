@@ -186,11 +186,30 @@ export default function Home() {
         <TitleScreen
           isPortrait={isPortrait}
           isSeinoMode={engine.isSeinoMode}
-          onSoundTest={() =>
-            voice.speak("こんにちわ！おとが きこえたら じゅんび オッケーだよ！")
-          }
+          onSoundTest={() => {
+            // 🚀 プロ推奨：おとテストは音声合成のみに専念（マイク事故を防止）
+            voice.speak(
+              "こんにちわ！おとが きこえたら じゅんび オッケーだよ！"
+            );
+          }}
           onToggleSeino={() => engine.setIsSeinoMode(!engine.isSeinoMode)}
-          onStart={handleGameStart}
+          onStart={() => {
+            // 🚀 プロ推奨：ここでマイクの許可（空回し）を実行
+            // 1. まずマイクを起動（ここでブラウザの許可ダイアログが出る）
+            recognition.startListening();
+
+            // 2. 0.1秒後にマイクを止め、その後に本来のスタート処理を呼ぶ
+            // これにより、音声合成(speak)との同時実行を回避し、フリーズを防ぐ
+            setTimeout(() => {
+              try {
+                recognition.stopListening();
+              } catch (e) {
+                // 万が一の停止エラーは無視
+              }
+              // 本来のゲーム開始処理へ
+              handleGameStart();
+            }, 100);
+          }}
         />
       )}
       {engine.gameState === "playing" && engine.currentQuestion && (
