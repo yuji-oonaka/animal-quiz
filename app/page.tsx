@@ -20,6 +20,27 @@ export default function Home() {
   const [showStartText, setShowStartText] = useState(false);
   const [showSeinoText, setShowSeinoText] = useState(false);
 
+  // 🚀 【追加】画像をキャッシュに送り込むヘルパー
+  const preloadOne = useCallback((url: string) => {
+    if (typeof window === "undefined") return;
+    const img = new Image();
+    img.src = url;
+  }, []);
+
+  // 🚀 【追加】ステップ1：タイトル表示中に Q1, Q2 をロード
+  useEffect(() => {
+    // 10問を確定させ、リストを取得
+    const selected = engine.prepareGame();
+
+    // 起動直後の負荷分散のため 0.5秒待ってから最初の2枚をロード
+    const timer = setTimeout(() => {
+      if (selected[0]) preloadOne(selected[0].image);
+      if (selected[1]) preloadOne(selected[1].image);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [engine.prepareGame, preloadOne]);
+
   useEffect(() => {
     const checkOrientation = () =>
       setIsPortrait(window.innerHeight > window.innerWidth);
@@ -50,6 +71,13 @@ export default function Home() {
       if (result.type === "ignore") return;
 
       const delayNext = () => {
+        // 🚀 【追加】ステップ3：正解した瞬間に「2問先」をロード
+        // Q1正解時ならQ3を、Q2正解時ならQ4を...と先回り
+        const nextNextIndex = engine.currentIndex + 2;
+        if (engine.gameQuestions[nextNextIndex]) {
+          preloadOne(engine.gameQuestions[nextNextIndex].image);
+        }
+
         setTimeout(() => {
           const hasNext = engine.nextQuestion();
           if (hasNext) {
@@ -90,7 +118,7 @@ export default function Home() {
         });
       }
     },
-    [engine, voice, recognition, effects, performSeinoAction]
+    [engine, voice, recognition, effects, performSeinoAction, preloadOne]
   );
 
   useEffect(() => {
@@ -99,7 +127,6 @@ export default function Home() {
       engine.gameState === "playing" &&
       !engine.isJudged
     ) {
-      // 🚀 100msに戻しました
       const timer = setTimeout(() => {
         handleAnswerCheck(recognition.text);
       }, 100);
@@ -111,6 +138,15 @@ export default function Home() {
     voice.cancelSpeech();
     recognition.stopListening();
     recognition.resetText();
+
+    // 🚀 【追加】ステップ2：「スタート！」の演出中に Q3, Q4, Q5 をロード
+    // ユーザーの意識が音に向いている隙に、中盤の問題を確保
+    setTimeout(() => {
+      if (engine.gameQuestions[2]) preloadOne(engine.gameQuestions[2].image);
+      if (engine.gameQuestions[3]) preloadOne(engine.gameQuestions[3].image);
+      if (engine.gameQuestions[4]) preloadOne(engine.gameQuestions[4].image);
+    }, 1000);
+
     engine.startGame();
     engine.setIsJudged(true);
     voice.speak("どうぶつクイズ！", () => {
@@ -129,9 +165,21 @@ export default function Home() {
     voice.cancelSpeech();
     recognition.stopListening();
     recognition.resetText();
-    engine.backToTitle();
-  };
 
+    // 1. まずタイトルに戻る
+    engine.backToTitle();
+
+    // 🚀 2. 【重要】次回のゲームのために、新しい10問をランダムに選び直す
+    const nextQuestions = engine.prepareGame();
+
+    // 🚀 3. 【重要】新しい問題の最初の2枚を即座にプリロード開始
+    // これにより、タイトル画面にいる間に次の準備が整います
+    setTimeout(() => {
+      if (nextQuestions[0]) preloadOne(nextQuestions[0].image);
+      if (nextQuestions[1]) preloadOne(nextQuestions[1].image);
+    }, 500);
+  };
+  
   return (
     <>
       {engine.gameState === "title" && (

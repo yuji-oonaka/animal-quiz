@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { questions, Question } from "../data/questions";
 
-// シャッフル関数
+// 配列のシャッフル（純粋関数）
 const shuffleArray = (array: Question[]) => {
   const newArray = [...array];
   for (let i = newArray.length - 1; i > 0; i--) {
@@ -24,15 +24,24 @@ export const useGameEngine = () => {
 
   const currentQuestion = useMemo(() => gameQuestions[currentIndex], [gameQuestions, currentIndex]);
 
-  const startGame = useCallback(() => {
+  // 🚀 【追加】ゲーム開始前に問題を準備する関数
+  // タイトル画面でこれを呼ぶことで、裏側での画像ロードを可能にします
+  const prepareGame = useCallback(() => {
     const shuffled = shuffleArray(questions);
-    setGameQuestions(shuffled.slice(0, 10));
+    const selected = shuffled.slice(0, 10);
+    setGameQuestions(selected);
+    return selected; // プリロード処理に渡すために返す
+  }, []);
+
+  const startGame = useCallback(() => {
+    // 🚀 修正：ここでは問題を選び直さず、
+    // タイトル画面などで「準備済み」の10問を使って即開始する
+    setGameState("playing");
     setCurrentIndex(0);
     setMistakeCount(0);
     setIsJudged(false);
     setIsQuestionVisible(false);
-    setGameState("playing");
-  }, []);
+  }, []); // 依存配列を空にして、ステートに左右されないようにします
 
   const nextQuestion = useCallback(() => {
     setIsJudged(false);
@@ -50,7 +59,6 @@ export const useGameEngine = () => {
   const processAnswer = useCallback((userVoice: string) => {
     if (isJudged || !isQuestionVisible || !userVoice) return { type: "ignore" };
 
-    // 否定判定
     if (currentQuestion.type === "not_animal") {
       const notKeywords = ["じゃない", "ちがう", "ありませ", "違い", "×", "バツ"];
       if (notKeywords.some((word) => userVoice.includes(word))) {
@@ -59,14 +67,8 @@ export const useGameEngine = () => {
       }
     }
 
-    // 正解判定ロジック
     const isCorrect = currentQuestion.aliases.some((alias) => {
-      // 🚀 2文字以下の短い言葉（イヌ、ネコ等）は完全一致か前方一致のみ
-      // これで会話のノイズ（「あー」「そう」等）による誤爆をガード
-      if (alias.length <= 2) {
-        return userVoice === alias || userVoice.startsWith(alias);
-      }
-      // 3文字以上の言葉は部分一致で寛容に受け止める
+      if (alias.length <= 2) return userVoice === alias || userVoice.startsWith(alias);
       return userVoice.includes(alias);
     });
 
@@ -90,9 +92,21 @@ export const useGameEngine = () => {
   const backToTitle = useCallback(() => setGameState("title"), []);
 
   return {
-    gameState, currentQuestion, currentIndex, isJudged, setIsJudged,
-    mistakeCount, isQuestionVisible, setIsQuestionVisible,
-    isSeinoMode, setIsSeinoMode, gameQuestions,
-    startGame, nextQuestion, processAnswer, backToTitle,
+    gameState,
+    currentQuestion,
+    currentIndex,
+    isJudged,
+    setIsJudged,
+    mistakeCount,
+    isQuestionVisible,
+    setIsQuestionVisible,
+    isSeinoMode,
+    setIsSeinoMode,
+    gameQuestions,
+    prepareGame, // 🚀 外部から準備を指示できるように追加
+    startGame,
+    nextQuestion,
+    processAnswer,
+    backToTitle,
   };
 };
