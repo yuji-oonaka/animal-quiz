@@ -1,6 +1,7 @@
 # 🐶 みんなでどうぶつクイズ！ (Animal Voice Quiz)
 
 **[📱 アプリを起動する (Demo)](https://animal-quiz-puce.vercel.app/)**
+<br>
 ※ Web Speech APIの仕様上、**Android (Chrome)** または **PC (Google Chrome)** での動作を推奨します。
 (iOS/Safariではブラウザの制限により動作が不安定な場合があります)
 
