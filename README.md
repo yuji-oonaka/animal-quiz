@@ -1,5 +1,9 @@
 # 🐶 みんなでどうぶつクイズ！ (Animal Voice Quiz)
 
+**[📱 アプリを起動する (Demo)](https://animal-quiz-puce.vercel.app/)**
+※ Web Speech APIの仕様上、**Android (Chrome)** または **PC (Google Chrome)** での動作を推奨します。
+(iOS/Safariではブラウザの制限により動作が不安定な場合があります)
+
 <img src="./public/images/title.png" alt="Title Screen" width="400">
 <br>
 <img src="https://github.com/user-attachments/assets/48e2bb1b-a4ca-48da-8f4c-033a41d81dbe" alt="Game Screen" width="187">
@@ -15,6 +19,7 @@
 **「声で遊ぶ」体験をWeb技術だけでどこまで実現できるか？**
 をテーマに開発した、子供向けの動物クイズアプリです。
 キーボードやタップ操作を排除し、画面に向かって「名前を叫ぶ」だけの直感的なインターフェースを目指しました。
+https://animal-quiz-puce.vercel.app/
 
 ---
 
